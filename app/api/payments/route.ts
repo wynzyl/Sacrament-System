@@ -1,0 +1,71 @@
+// app/api/payments/route.ts
+// API for creating payments
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { generateReceiptNumber, validateApiSession } from '@/lib/auth';
+
+export async function POST(request: NextRequest) {
+  try {
+    // Validate session
+    const { isValid, user } = await validateApiSession();
+    if (!isValid || !user) {
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    const { appointmentId, amount, paymentMethod, gcashRefNumber } = await request.json();
+
+    // Validate required fields
+    if (!appointmentId || !amount || !paymentMethod) {
+      return NextResponse.json(
+        { error: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+
+    // Check if appointment exists
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      return NextResponse.json(
+        { error: 'Appointment not found' },
+        { status: 404 }
+      );
+    }
+
+    // Create payment using session user's ID
+    const payment = await prisma.payment.create({
+      data: {
+        amount,
+        paymentMethod,
+        gcashRefNumber,
+        receiptNumber: generateReceiptNumber(),
+        appointmentId,
+        processedById: user.id, // Use session user's ID
+      },
+      include: {
+        appointment: true,
+        processedBy: true,
+      },
+    });
+
+    // Update appointment status to COMPLETED
+    await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: 'COMPLETED' },
+    });
+
+    return NextResponse.json(payment, { status: 201 });
+  } catch (error) {
+    console.error('Payment creation error:', error);
+    return NextResponse.json(
+      { error: 'Failed to process payment' },
+      { status: 500 }
+    );
+  }
+}
