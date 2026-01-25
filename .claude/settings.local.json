@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\Users\\\\wynzy\\\\Downloads\\\\sacrament-system\" /s /b)",
+      "Bash(npx prisma migrate:*)"
+    ]
+  }
+}

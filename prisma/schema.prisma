@@ -1,0 +1,164 @@
+// prisma/schema.prisma
+// This file defines your database structure
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - represents system users (Admin, Priest, Cashier)
+model User {
+  id           String             @id @default(uuid())
+  email        String             @unique
+  password     String
+  name         String
+  role         UserRole
+  status       UserStatus         @default(ACTIVE)
+  availability PriestAvailability @default(AVAILABLE)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  // Relations
+  appointments        Appointment[] @relation("CreatedByUser") // Appointments created by this user
+  assignedAppointments Appointment[] @relation("AssignedPriest") // Appointments assigned to this priest
+  payments            Payment[]     // Payments processed by this cashier
+  sessions            Session[]     // User sessions
+}
+
+// Session model - for server-side session authentication
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+// Enum for user roles
+enum UserRole {
+  ADMIN
+  PRIEST
+  CASHIER
+}
+
+// Enum for user status (Active/Inactive)
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+// Enum for priest availability
+enum PriestAvailability {
+  AVAILABLE
+  DAYOFF
+}
+
+// Sacrament types available
+enum SacramentType {
+  BAPTISM
+  WEDDING
+  CONFIRMATION
+  FUNERAL
+  FIRST_COMMUNION
+  ANOINTING_OF_SICK
+}
+
+// Appointment status tracking
+enum AppointmentStatus {
+  PENDING      // Just created
+  CONFIRMED    // Confirmed by admin/priest
+  COMPLETED    // Service completed
+  CANCELLED    // Cancelled
+}
+
+// Payment method options
+enum PaymentMethod {
+  CASH
+  GCASH
+}
+
+// Appointment model - stores sacrament schedules
+model Appointment {
+  id            String            @id @default(uuid())
+  sacramentType SacramentType
+
+  // Participant information
+  participantName  String
+  participantPhone String?
+  participantEmail String?
+
+  // Participant address
+  barangay         String?
+  city             String?         @default("Urdaneta City")
+  province         String?         @default("Pangasinan")
+
+  // Schedule details
+  scheduledDate DateTime
+  scheduledTime String
+
+  // Location and notes
+  location      String?           @default("Immaculate Conception Parish Church")
+  notes         String?
+  
+  // Status tracking
+  status        AppointmentStatus @default(PENDING)
+  
+  // Fee information
+  fee           Float             @default(0)
+  
+  // Relationships
+  createdBy     User              @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdById   String
+
+  // Assigned Priest
+  assignedPriest   User?          @relation("AssignedPriest", fields: [assignedPriestId], references: [id])
+  assignedPriestId String?
+
+  payments      Payment[]
+  
+  // Timestamps
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  @@index([sacramentType])
+  @@index([scheduledDate])
+  @@index([status])
+}
+
+// Payment model - tracks all payments
+model Payment {
+  id              String        @id @default(uuid())
+  
+  // Payment details
+  amount          Float
+  paymentMethod   PaymentMethod
+  
+  // GCash specific details
+  gcashRefNumber  String?       // Reference number for GCash
+  
+  // Receipt information
+  receiptNumber   String        @unique
+  
+  // Relationships
+  appointment     Appointment   @relation(fields: [appointmentId], references: [id])
+  appointmentId   String
+  
+  processedBy     User          @relation(fields: [processedById], references: [id])
+  processedById   String        // Cashier who processed
+  
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  
+  @@index([createdAt])
+  @@index([processedById])
+  @@index([paymentMethod])
+}
