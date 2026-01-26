@@ -83,8 +83,8 @@ export default function CashierDashboard() {
 
   const fetchData = async () => {
     try {
-      // Fetch confirmed appointments without payment
-      const appointmentsRes = await fetch('/api/appointments?status=CONFIRMED&unpaid=true');
+      // Fetch pending appointments without payment
+      const appointmentsRes = await fetch('/api/appointments?status=PENDING&unpaid=true');
       const appointmentsData = await appointmentsRes.json();
       setAppointments(appointmentsData);
 

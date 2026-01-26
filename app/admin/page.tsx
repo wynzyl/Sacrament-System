@@ -281,16 +281,16 @@ export default function AdminDashboard() {
     setShowAppointmentModal(true);
   };
 
-  const handleDeleteAppointment = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this appointment?')) return;
+  const handleCancelAppointment = async (id: string) => {
+    if (!confirm('Are you sure you want to cancel this appointment?')) return;
 
     try {
       const response = await fetch(`/api/appointments/${id}`, { method: 'DELETE' });
-      if (!response.ok) throw new Error('Failed to delete');
-      alert('Appointment deleted!');
+      if (!response.ok) throw new Error('Failed to cancel');
+      alert('Appointment cancelled!');
       fetchAppointments();
     } catch (error) {
-      alert('Error deleting appointment');
+      alert('Error cancelling appointment');
     }
   };
 
@@ -708,7 +708,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-6 py-4 text-sm space-x-2">
                         <button onClick={() => handleEditAppointment(apt)} className="text-blue-600 hover:text-blue-900">Edit</button>
-                        <button onClick={() => handleDeleteAppointment(apt.id)} className="text-red-600 hover:text-red-900">Delete</button>
+                        <button onClick={() => handleCancelAppointment(apt.id)} className="text-red-600 hover:text-red-900">Cancel</button>
                       </td>
                     </tr>
                   ))}
@@ -925,7 +925,7 @@ export default function AdminDashboard() {
               {editingAppointmentId ? 'Edit Appointment' : 'New Appointment'}
             </h2>
             <form onSubmit={handleAppointmentSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className={editingAppointmentId ? "grid grid-cols-2 gap-4" : ""}>
                 <div>
                   <label className="block text-sm font-medium mb-1">Sacrament Type</label>
                   <select
@@ -941,19 +941,21 @@ export default function AdminDashboard() {
                     <option value="ANOINTING_OF_SICK">Anointing of Sick</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Status</label>
-                  <select
-                    value={appointmentForm.status}
-                    onChange={(e) => setAppointmentForm({...appointmentForm, status: e.target.value})}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  >
-                    <option value="PENDING">Pending</option>
-                    <option value="CONFIRMED">Confirmed</option>
-                    <option value="COMPLETED">Completed</option>
-                    <option value="CANCELLED">Cancelled</option>
-                  </select>
-                </div>
+                {editingAppointmentId && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Status</label>
+                    <select
+                      value={appointmentForm.status}
+                      onChange={(e) => setAppointmentForm({...appointmentForm, status: e.target.value})}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    >
+                      <option value="PENDING">Pending</option>
+                      <option value="CONFIRMED">Confirmed</option>
+                      <option value="COMPLETED">Completed</option>
+                      <option value="CANCELLED">Cancelled</option>
+                    </select>
+                  </div>
+                )}
               </div>
 
               {/* Assigned Priest */}

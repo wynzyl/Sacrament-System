@@ -26,9 +26,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if appointment exists
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
+    // Check if appointment exists and is not soft-deleted
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: appointmentId, deletedAt: null },
     });
 
     if (!appointment) {
@@ -54,10 +54,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update appointment status to COMPLETED
+    // Update appointment status to CONFIRMED after payment
     await prisma.appointment.update({
       where: { id: appointmentId },
-      data: { status: 'COMPLETED' },
+      data: { status: 'CONFIRMED' },
     });
 
     return NextResponse.json(payment, { status: 201 });

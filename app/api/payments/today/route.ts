@@ -23,13 +23,14 @@ export async function GET() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Fetch all payments for today
+    // Fetch all payments for today (excluding soft-deleted)
     const payments = await prisma.payment.findMany({
       where: {
         createdAt: {
           gte: today,
           lt: tomorrow,
         },
+        deletedAt: null,
       },
       include: {
         appointment: {
