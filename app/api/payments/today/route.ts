@@ -23,15 +23,24 @@ export async function GET() {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Fetch all payments for today (excluding soft-deleted)
-    const payments = await prisma.payment.findMany({
-      where: {
-        createdAt: {
-          gte: today,
-          lt: tomorrow,
-        },
-        deletedAt: null,
+    // Build query with role-based filtering
+    const where: any = {
+      createdAt: {
+        gte: today,
+        lt: tomorrow,
       },
+      deletedAt: null,
+    };
+
+    // Cashiers can only see their own processed payments
+    if (user.role === 'CASHIER') {
+      where.processedById = user.id;
+    }
+    // ADMIN sees all payments
+
+    // Fetch payments for today (excluding soft-deleted)
+    const payments = await prisma.payment.findMany({
+      where,
       include: {
         appointment: {
           select: {

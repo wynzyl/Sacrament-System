@@ -40,7 +40,7 @@ export default function PriestDashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<string>('mine');
+  const [filter, setFilter] = useState<string>('all');
 
   useEffect(() => {
     // Check session via API
@@ -130,24 +130,22 @@ export default function PriestDashboard() {
     }
   };
 
-  // Get appointments assigned to this priest
-  const myAppointments = appointments.filter(apt => apt.assignedPriestId === user?.id);
-
+  // API now returns only appointments assigned to this priest (server-side filtering)
+  // Filter appointments based on status selection
   const filteredAppointments = appointments.filter(apt => {
-    if (filter === 'mine') return apt.assignedPriestId === user?.id && apt.status !== 'CANCELLED';
     if (filter === 'all') return apt.status !== 'CANCELLED';
-    return apt.status === filter;
+    return apt.status === filter && apt.status !== 'CANCELLED';
   });
 
-  // Get today's appointments (assigned to this priest)
+  // Get today's appointments
   const today = new Date().toISOString().split('T')[0];
-  const todayAppointments = myAppointments.filter(apt => {
+  const todayAppointments = appointments.filter(apt => {
     const aptDate = new Date(apt.scheduledDate).toISOString().split('T')[0];
     return aptDate === today && apt.status !== 'CANCELLED';
   });
 
-  // Get upcoming confirmed appointments (assigned to this priest)
-  const upcomingConfirmed = myAppointments.filter(apt =>
+  // Get upcoming confirmed appointments
+  const upcomingConfirmed = appointments.filter(apt =>
     apt.status === 'CONFIRMED' && new Date(apt.scheduledDate) >= new Date()
   );
 
@@ -178,11 +176,11 @@ export default function PriestDashboard() {
           <div className="bg-white p-6 rounded-lg shadow">
             <h3 className="text-sm font-medium text-gray-500">My Appointments</h3>
             <p className="text-3xl font-bold text-purple-600">
-              {myAppointments.filter(a => a.status !== 'CANCELLED').length}
+              {appointments.filter(a => a.status !== 'CANCELLED').length}
             </p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-gray-500">Today (Assigned)</h3>
+            <h3 className="text-sm font-medium text-gray-500">Today</h3>
             <p className="text-3xl font-bold text-blue-600">{todayAppointments.length}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
@@ -190,16 +188,16 @@ export default function PriestDashboard() {
             <p className="text-3xl font-bold text-green-600">{upcomingConfirmed.length}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-gray-500">All Scheduled</h3>
-            <p className="text-3xl font-bold text-gray-600">
-              {appointments.filter(a => a.status !== 'CANCELLED').length}
+            <h3 className="text-sm font-medium text-gray-500">Pending</h3>
+            <p className="text-3xl font-bold text-yellow-600">
+              {appointments.filter(a => a.status === 'PENDING').length}
             </p>
           </div>
         </div>
 
         {/* Filter Tabs */}
         <div className="mb-6 flex flex-wrap gap-2">
-          {['mine', 'all', 'PENDING', 'CONFIRMED', 'COMPLETED'].map((status) => (
+          {['all', 'PENDING', 'CONFIRMED', 'COMPLETED'].map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
@@ -209,7 +207,7 @@ export default function PriestDashboard() {
                   : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
-              {status === 'mine' ? 'My Appointments' : status === 'all' ? 'All Active' : status}
+              {status === 'all' ? 'All Active' : status}
             </button>
           ))}
         </div>

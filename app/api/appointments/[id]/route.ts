@@ -50,6 +50,24 @@ export async function GET(
       );
     }
 
+    // Role-based access control
+    if (user.role !== 'ADMIN') {
+      // Priests can only access their assigned appointments
+      if (user.role === 'PRIEST' && appointment.assignedPriestId !== user.id) {
+        return NextResponse.json(
+          { error: 'Access denied' },
+          { status: 403 }
+        );
+      }
+      // Cashiers should not access individual appointments via this endpoint
+      if (user.role === 'CASHIER') {
+        return NextResponse.json(
+          { error: 'Access denied' },
+          { status: 403 }
+        );
+      }
+    }
+
     return NextResponse.json(appointment);
   } catch (error) {
     console.error('Error fetching appointment:', error);
@@ -88,6 +106,37 @@ export async function PUT(
         { error: 'Appointment not found' },
         { status: 404 }
       );
+    }
+
+    // Role-based access control for updates
+    if (user.role !== 'ADMIN') {
+      // Priests can only update their assigned appointments (limited to status changes only)
+      if (user.role === 'PRIEST') {
+        if (existingAppointment.assignedPriestId !== user.id) {
+          return NextResponse.json(
+            { error: 'Access denied' },
+            { status: 403 }
+          );
+        }
+
+        // Validate that priest is only updating the status field
+        const allowedFields = ['status'];
+        const providedFields = Object.keys(data).filter(key => data[key] !== undefined);
+        const disallowedFields = providedFields.filter(field => !allowedFields.includes(field));
+
+        if (disallowedFields.length > 0) {
+          return NextResponse.json(
+            { error: 'Access denied' },
+            { status: 403 }
+          );
+        }
+      } else if (user.role === 'CASHIER') {
+        // Cashiers cannot update appointments
+        return NextResponse.json(
+          { error: 'Only administrators can update appointments' },
+          { status: 403 }
+        );
+      }
     }
 
     const {
