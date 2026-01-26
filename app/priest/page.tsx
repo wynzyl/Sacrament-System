@@ -423,6 +423,62 @@ export default function PriestDashboard() {
             {/* Date Range Picker */}
             <div className="bg-white p-6 rounded-lg shadow">
               <h2 className="text-xl font-bold mb-4">Confirmed Appointments Report</h2>
+              {/* Quick Date Presets */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Quick Select</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const dateStr = today.toISOString().split('T')[0];
+                      setReportFromDate(dateStr);
+                      setReportToDate(dateStr);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const dayOfWeek = today.getDay();
+                      const startOfWeek = new Date(today);
+                      startOfWeek.setDate(today.getDate() - dayOfWeek);
+                      const endOfWeek = new Date(startOfWeek);
+                      endOfWeek.setDate(startOfWeek.getDate() + 6);
+                      setReportFromDate(startOfWeek.toISOString().split('T')[0]);
+                      setReportToDate(endOfWeek.toISOString().split('T')[0]);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    This Week
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                      setReportFromDate(startOfMonth.toISOString().split('T')[0]);
+                      setReportToDate(endOfMonth.toISOString().split('T')[0]);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    This Month
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                      const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+                      setReportFromDate(startOfLastMonth.toISOString().split('T')[0]);
+                      setReportToDate(endOfLastMonth.toISOString().split('T')[0]);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    Last Month
+                  </button>
+                </div>
+              </div>
               <div className="flex flex-wrap gap-4 items-end">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>

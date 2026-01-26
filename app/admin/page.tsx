@@ -182,6 +182,15 @@ export default function AdminDashboard() {
   const [collectionsData, setCollectionsData] = useState<{ payments: ReportPayment[], totals: { cash: number, gcash: number, total: number } } | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
 
+  // Search & Filter state for appointments
+  const [searchTerm, setSearchTerm] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sacramentFilter, setSacramentFilter] = useState('all');
+  const [sortField, setSortField] = useState<'date' | 'name' | 'type'>('date');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
   useEffect(() => {
     // Check session via API
     const checkSession = async () => {
@@ -865,12 +874,145 @@ export default function AdminDashboard() {
               </button>
             </div>
 
+            {/* Search & Filter Section */}
+            <div className="bg-white rounded-lg shadow p-4 mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                {/* Search Input */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Search Participant</label>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Enter name..."
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Date From */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Date To */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="CONFIRMED">Confirmed</option>
+                    <option value="COMPLETED">Completed</option>
+                    <option value="CANCELLED">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-4 items-end">
+                {/* Sacrament Type Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sacrament Type</label>
+                  <select
+                    value={sacramentFilter}
+                    onChange={(e) => setSacramentFilter(e.target.value)}
+                    className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="BAPTISM">Baptism</option>
+                    <option value="WEDDING">Wedding</option>
+                    <option value="CONFIRMATION">Confirmation</option>
+                    <option value="FUNERAL">Funeral</option>
+                    <option value="FIRST_COMMUNION">First Communion</option>
+                    <option value="ANOINTING_OF_SICK">Anointing of Sick</option>
+                    <option value="MASS_INTENTION">Mass Intention</option>
+                  </select>
+                </div>
+
+                {/* Sort Options */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                  <div className="flex gap-2">
+                    <select
+                      value={sortField}
+                      onChange={(e) => setSortField(e.target.value as 'date' | 'name' | 'type')}
+                      className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="date">Date</option>
+                      <option value="name">Name</option>
+                      <option value="type">Sacrament</option>
+                    </select>
+                    <button
+                      onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
+                      className="px-3 py-2 border rounded-lg hover:bg-gray-100"
+                      title={sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                    >
+                      {sortDirection === 'asc' ? '↑' : '↓'}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Clear Filters Button */}
+                <button
+                  onClick={() => {
+                    setSearchTerm('');
+                    setDateFrom('');
+                    setDateTo('');
+                    setStatusFilter('all');
+                    setSacramentFilter('all');
+                    setSortField('date');
+                    setSortDirection('asc');
+                  }}
+                  className="px-4 py-2 text-gray-600 border rounded-lg hover:bg-gray-100"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Results Count */}
+            {(() => {
+              const filteredCount = appointments.filter(apt => {
+                if (searchTerm && !apt.participantName.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+                if (dateFrom && new Date(apt.scheduledDate) < new Date(dateFrom)) return false;
+                if (dateTo && new Date(apt.scheduledDate) > new Date(dateTo + 'T23:59:59')) return false;
+                if (statusFilter !== 'all' && apt.status !== statusFilter) return false;
+                if (sacramentFilter !== 'all' && apt.sacramentType !== sacramentFilter) return false;
+                return true;
+              }).length;
+
+              return (
+                <div className="mb-4 text-sm text-gray-600">
+                  Showing {filteredCount} of {appointments.length} appointments
+                </div>
+              );
+            })()}
+
             {appointments.length === 0 ? (
               <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
                 No appointments found
               </div>
             ) : (
-              // Group appointments by sacrament type and sort by scheduled date
+              // Filter, sort, and group appointments
               (() => {
                 const sacramentOrder = ['BAPTISM', 'WEDDING', 'CONFIRMATION', 'FUNERAL', 'FIRST_COMMUNION', 'ANOINTING_OF_SICK', 'MASS_INTENTION'];
                 const sacramentLabels: Record<string, string> = {
@@ -882,16 +1024,55 @@ export default function AdminDashboard() {
                   'ANOINTING_OF_SICK': 'Anointing of Sick',
                   'MASS_INTENTION': 'Mass Intention'
                 };
-                const grouped = appointments.reduce((acc, apt) => {
+
+                // Apply filters
+                const filteredAppointments = appointments.filter(apt => {
+                  // Search filter
+                  if (searchTerm && !apt.participantName.toLowerCase().includes(searchTerm.toLowerCase())) {
+                    return false;
+                  }
+                  // Date range filter
+                  if (dateFrom && new Date(apt.scheduledDate) < new Date(dateFrom)) return false;
+                  if (dateTo && new Date(apt.scheduledDate) > new Date(dateTo + 'T23:59:59')) return false;
+                  // Status filter
+                  if (statusFilter !== 'all' && apt.status !== statusFilter) return false;
+                  // Sacrament filter
+                  if (sacramentFilter !== 'all' && apt.sacramentType !== sacramentFilter) return false;
+                  return true;
+                });
+
+                // Apply sorting
+                const sortedAppointments = [...filteredAppointments].sort((a, b) => {
+                  let comparison = 0;
+                  switch (sortField) {
+                    case 'date':
+                      comparison = new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+                      break;
+                    case 'name':
+                      comparison = a.participantName.localeCompare(b.participantName);
+                      break;
+                    case 'type':
+                      comparison = a.sacramentType.localeCompare(b.sacramentType);
+                      break;
+                  }
+                  return sortDirection === 'asc' ? comparison : -comparison;
+                });
+
+                // Show "no results" message if all filtered out
+                if (sortedAppointments.length === 0) {
+                  return (
+                    <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                      No appointments match your filters
+                    </div>
+                  );
+                }
+
+                // Group appointments by sacrament type
+                const grouped = sortedAppointments.reduce((acc, apt) => {
                   if (!acc[apt.sacramentType]) acc[apt.sacramentType] = [];
                   acc[apt.sacramentType].push(apt);
                   return acc;
                 }, {} as Record<string, Appointment[]>);
-
-                // Sort each group by scheduled date
-                Object.keys(grouped).forEach(key => {
-                  grouped[key].sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
-                });
 
                 return sacramentOrder
                   .filter(type => grouped[type] && grouped[type].length > 0)
@@ -1152,6 +1333,63 @@ export default function AdminDashboard() {
 
             {/* Report Controls */}
             <div className="bg-white p-6 rounded-lg shadow mb-6">
+              {/* Quick Date Presets */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium mb-2">Quick Select</label>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const dateStr = today.toISOString().split('T')[0];
+                      setReportFromDate(dateStr);
+                      setReportToDate(dateStr);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const dayOfWeek = today.getDay();
+                      const startOfWeek = new Date(today);
+                      startOfWeek.setDate(today.getDate() - dayOfWeek);
+                      const endOfWeek = new Date(startOfWeek);
+                      endOfWeek.setDate(startOfWeek.getDate() + 6);
+                      setReportFromDate(startOfWeek.toISOString().split('T')[0]);
+                      setReportToDate(endOfWeek.toISOString().split('T')[0]);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    This Week
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+                      const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                      setReportFromDate(startOfMonth.toISOString().split('T')[0]);
+                      setReportToDate(endOfMonth.toISOString().split('T')[0]);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    This Month
+                  </button>
+                  <button
+                    onClick={() => {
+                      const today = new Date();
+                      const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                      const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+                      setReportFromDate(startOfLastMonth.toISOString().split('T')[0]);
+                      setReportToDate(endOfLastMonth.toISOString().split('T')[0]);
+                    }}
+                    className="px-3 py-1 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg"
+                  >
+                    Last Month
+                  </button>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div>
                   <label className="block text-sm font-medium mb-1">Report Type</label>
