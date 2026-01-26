@@ -47,6 +47,13 @@ export async function GET(request: NextRequest) {
       deletedAt: null, // Always filter out soft-deleted records
     };
 
+    // Role-based filtering
+    if (user.role === 'PRIEST') {
+      // Priests can only see appointments assigned to them
+      where.assignedPriestId = user.id;
+    }
+    // ADMIN and CASHIER see all appointments (CASHIER needs to see pending for payment processing)
+
     if (status) {
       where.status = status;
     }

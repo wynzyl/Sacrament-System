@@ -16,6 +16,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Only CASHIER and ADMIN can process payments
+    if (user.role !== 'CASHIER' && user.role !== 'ADMIN') {
+      return NextResponse.json(
+        { error: 'Only cashiers can process payments' },
+        { status: 403 }
+      );
+    }
+
     const { appointmentId, amount, paymentMethod, gcashRefNumber } = await request.json();
 
     // Validate required fields
