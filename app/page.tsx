@@ -197,7 +197,8 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-blue-100 text-xs mt-6">
-          © 2026 Church Management System. All rights reserved.
+          © 2026 Sacrament Management and Payment Monitoring System. 
+          <p className="text-center text-blue-100 text-xs mt-1">All rights reserved.</p>
         </p>
       </div>
     </div>
