@@ -106,6 +106,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-6 shadow-lg">
             <span className="text-4xl">✝️</span>
           </div>
+          <p className="text-blue-100 text-xl">Immaculate Conception Cathedral Parish</p>
           <h1 className="text-4xl font-bold text-white mb-3">
             Church Management
           </h1>
