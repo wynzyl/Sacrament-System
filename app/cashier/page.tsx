@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { useAutoLogout } from '@/lib/useAutoLogout';
 
 interface User {
   id: string;
@@ -36,6 +37,7 @@ interface Payment {
 
 export default function CashierDashboard() {
   const router = useRouter();
+  useAutoLogout(); // Auto logout after 5 minutes of inactivity
   const [user, setUser] = useState<User | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);

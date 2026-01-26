@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDate, formatCurrency, formatDateTime } from '@/lib/utils';
+import { useAutoLogout } from '@/lib/useAutoLogout';
 
 interface User {
   id: string;
@@ -96,6 +97,7 @@ type TabType = 'dashboard' | 'appointments' | 'users' | 'priests' | 'payments';
 
 export default function AdminDashboard() {
   const router = useRouter();
+  useAutoLogout(); // Auto logout after 5 minutes of inactivity
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [loading, setLoading] = useState(true);
@@ -114,7 +116,7 @@ export default function AdminDashboard() {
     province: 'Pangasinan',
     scheduledDate: '',
     scheduledTime: '',
-    location: '',
+    location: 'Immaculate Conception Cathedral Parish',
     notes: '',
     fee: '',
     status: 'PENDING',
@@ -306,7 +308,7 @@ export default function AdminDashboard() {
       province: 'Pangasinan',
       scheduledDate: '',
       scheduledTime: '',
-      location: '',
+      location: 'Immaculate Conception Cathedral Parish',
       notes: '',
       fee: '',
       status: 'PENDING',
@@ -672,52 +674,88 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participant</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sacrament</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned Priest</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fee</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {appointments.map((apt) => (
-                    <tr key={apt.id}>
-                      <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{apt.participantName}</div>
-                        <div className="text-sm text-gray-500">{apt.participantPhone}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{apt.sacramentType.replace('_', ' ')}</td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-gray-900">{formatDate(apt.scheduledDate)}</div>
-                        <div className="text-sm text-gray-500">{apt.scheduledTime}</div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">
-                        {apt.assignedPriest?.name || <span className="text-gray-400">Not assigned</span>}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900">{formatCurrency(apt.fee)}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-2 py-1 text-xs rounded ${getStatusColor(apt.status)}`}>
-                          {apt.status}
+            {appointments.length === 0 ? (
+              <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+                No appointments found
+              </div>
+            ) : (
+              // Group appointments by sacrament type and sort by scheduled date
+              (() => {
+                const sacramentOrder = ['BAPTISM', 'WEDDING', 'CONFIRMATION', 'FUNERAL', 'FIRST_COMMUNION', 'ANOINTING_OF_SICK', 'MASS_INTENTION'];
+                const sacramentLabels: Record<string, string> = {
+                  'BAPTISM': 'Baptism',
+                  'WEDDING': 'Wedding',
+                  'CONFIRMATION': 'Confirmation',
+                  'FUNERAL': 'Funeral',
+                  'FIRST_COMMUNION': 'First Communion',
+                  'ANOINTING_OF_SICK': 'Anointing of Sick',
+                  'MASS_INTENTION': 'Mass Intention'
+                };
+                const grouped = appointments.reduce((acc, apt) => {
+                  if (!acc[apt.sacramentType]) acc[apt.sacramentType] = [];
+                  acc[apt.sacramentType].push(apt);
+                  return acc;
+                }, {} as Record<string, Appointment[]>);
+
+                // Sort each group by scheduled date
+                Object.keys(grouped).forEach(key => {
+                  grouped[key].sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime());
+                });
+
+                return sacramentOrder
+                  .filter(type => grouped[type] && grouped[type].length > 0)
+                  .map(sacramentType => (
+                    <div key={sacramentType} className="mb-8">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                          {sacramentLabels[sacramentType]} ({grouped[sacramentType].length})
                         </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm space-x-2">
-                        <button onClick={() => handleEditAppointment(apt)} className="text-blue-600 hover:text-blue-900">Edit</button>
-                        <button onClick={() => handleCancelAppointment(apt.id)} className="text-red-600 hover:text-red-900">Cancel</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {appointments.length === 0 && (
-                <div className="text-center py-8 text-gray-500">No appointments found</div>
-              )}
-            </div>
+                      </h3>
+                      <div className="bg-white rounded-lg shadow overflow-hidden">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Participant</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Schedule</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Assigned Priest</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fee</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {grouped[sacramentType].map((apt) => (
+                              <tr key={apt.id}>
+                                <td className="px-6 py-4">
+                                  <div className="text-sm font-medium text-gray-900">{apt.participantName}</div>
+                                  <div className="text-sm text-gray-500">{apt.participantPhone}</div>
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="text-sm text-gray-900">{formatDate(apt.scheduledDate)}</div>
+                                  <div className="text-sm text-gray-500">{apt.scheduledTime}</div>
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-900">
+                                  {apt.assignedPriest?.name || <span className="text-gray-400">Not assigned</span>}
+                                </td>
+                                <td className="px-6 py-4 text-sm text-gray-900">{formatCurrency(apt.fee)}</td>
+                                <td className="px-6 py-4">
+                                  <span className={`px-2 py-1 text-xs rounded ${getStatusColor(apt.status)}`}>
+                                    {apt.status}
+                                  </span>
+                                </td>
+                                <td className="px-6 py-4 text-sm space-x-2">
+                                  <button onClick={() => handleEditAppointment(apt)} className="text-blue-600 hover:text-blue-900">Edit</button>
+                                  <button onClick={() => handleCancelAppointment(apt.id)} className="text-red-600 hover:text-red-900">Cancel</button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ));
+              })()
+            )}
           </div>
         )}
 
@@ -939,6 +977,7 @@ export default function AdminDashboard() {
                     <option value="FUNERAL">Funeral</option>
                     <option value="FIRST_COMMUNION">First Communion</option>
                     <option value="ANOINTING_OF_SICK">Anointing of Sick</option>
+                    <option value="MASS_INTENTION">Mass Intention</option>
                   </select>
                 </div>
                 {editingAppointmentId && (

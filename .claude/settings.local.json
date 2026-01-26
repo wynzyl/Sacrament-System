@@ -3,7 +3,11 @@
     "allow": [
       "Bash(dir \"C:\\\\Users\\\\wynzy\\\\Downloads\\\\sacrament-system\" /s /b)",
       "Bash(npx prisma migrate:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx prisma generate:*)"
     ]
   }
 }

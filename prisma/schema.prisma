@@ -71,6 +71,7 @@ enum SacramentType {
   FUNERAL
   FIRST_COMMUNION
   ANOINTING_OF_SICK
+  MASS_INTENTION
 }
 
 // Appointment status tracking

@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { useAutoLogout } from '@/lib/useAutoLogout';
 
 interface User {
   id: string;
@@ -37,6 +38,7 @@ interface Appointment {
 
 export default function PriestDashboard() {
   const router = useRouter();
+  useAutoLogout(); // Auto logout after 5 minutes of inactivity
   const [user, setUser] = useState<User | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,6 +128,7 @@ export default function PriestDashboard() {
       case 'FUNERAL': return '🕯️';
       case 'FIRST_COMMUNION': return '🍞';
       case 'ANOINTING_OF_SICK': return '🙏';
+      case 'MASS_INTENTION': return '✝️';
       default: return '⛪';
     }
   };
@@ -134,7 +137,7 @@ export default function PriestDashboard() {
   // Filter appointments based on status selection
   const filteredAppointments = appointments.filter(apt => {
     if (filter === 'all') return apt.status !== 'CANCELLED';
-    return apt.status === filter && apt.status !== 'CANCELLED';
+    return apt.status === filter;
   });
 
   // Get today's appointments
@@ -188,16 +191,16 @@ export default function PriestDashboard() {
             <p className="text-3xl font-bold text-green-600">{upcomingConfirmed.length}</p>
           </div>
           <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-sm font-medium text-gray-500">Pending</h3>
-            <p className="text-3xl font-bold text-yellow-600">
-              {appointments.filter(a => a.status === 'PENDING').length}
+            <h3 className="text-sm font-medium text-gray-500">Cancelled</h3>
+            <p className="text-3xl font-bold text-red-600">
+              {appointments.filter(a => a.status === 'CANCELLED').length}
             </p>
           </div>
         </div>
 
         {/* Filter Tabs */}
         <div className="mb-6 flex flex-wrap gap-2">
-          {['all', 'PENDING', 'CONFIRMED', 'COMPLETED'].map((status) => (
+          {['all', 'CONFIRMED', 'COMPLETED', 'CANCELLED'].map((status) => (
             <button
               key={status}
               onClick={() => setFilter(status)}
