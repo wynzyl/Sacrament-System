@@ -20,7 +20,9 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const role = searchParams.get('role');
 
-    const where: any = {};
+    const where: any = {
+      deletedAt: null, // Always filter out soft-deleted users
+    };
     if (role) {
       where.role = role;
     }
@@ -82,9 +84,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if email already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
+    // Check if email already exists (only among non-deleted users)
+    const existingUser = await prisma.user.findFirst({
+      where: { email, deletedAt: null },
     });
 
     if (existingUser) {

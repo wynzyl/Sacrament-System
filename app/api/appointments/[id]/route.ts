@@ -28,10 +28,12 @@ export async function GET(
 
     const { id } = await params;
 
-    const appointment = await prisma.appointment.findUnique({
-      where: { id },
+    const appointment = await prisma.appointment.findFirst({
+      where: { id, deletedAt: null },
       include: {
-        payments: true,
+        payments: {
+          where: { deletedAt: null },
+        },
         createdBy: {
           select: {
             name: true,
@@ -75,6 +77,18 @@ export async function PUT(
 
     const { id } = await params;
     const data = await request.json();
+
+    // Check if appointment exists and is not soft-deleted
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: { id, deletedAt: null },
+    });
+
+    if (!existingAppointment) {
+      return NextResponse.json(
+        { error: 'Appointment not found' },
+        { status: 404 }
+      );
+    }
 
     const {
       sacramentType,
@@ -123,7 +137,7 @@ export async function PUT(
   }
 }
 
-// DELETE appointment (Admin only)
+// DELETE appointment (Admin only) - Changes status to CANCELLED instead of hard delete
 export async function DELETE(
   request: NextRequest,
   { params }: RouteParams
@@ -138,31 +152,39 @@ export async function DELETE(
       );
     }
 
-    // Only ADMIN can delete appointments
+    // Only ADMIN can cancel appointments
     if (user.role !== 'ADMIN') {
       return NextResponse.json(
-        { error: 'Only administrators can delete appointments' },
+        { error: 'Only administrators can cancel appointments' },
         { status: 403 }
       );
     }
 
     const { id } = await params;
 
-    // First delete related payments
-    await prisma.payment.deleteMany({
-      where: { appointmentId: id },
+    // Check if appointment exists and is not already soft-deleted
+    const existingAppointment = await prisma.appointment.findFirst({
+      where: { id, deletedAt: null },
     });
 
-    // Then delete the appointment
-    await prisma.appointment.delete({
+    if (!existingAppointment) {
+      return NextResponse.json(
+        { error: 'Appointment not found' },
+        { status: 404 }
+      );
+    }
+
+    // Change status to CANCELLED instead of deleting
+    await prisma.appointment.update({
       where: { id },
+      data: { status: 'CANCELLED' },
     });
 
-    return NextResponse.json({ message: 'Appointment deleted successfully' });
+    return NextResponse.json({ message: 'Appointment cancelled successfully' });
   } catch (error) {
-    console.error('Error deleting appointment:', error);
+    console.error('Error cancelling appointment:', error);
     return NextResponse.json(
-      { error: 'Failed to delete appointment' },
+      { error: 'Failed to cancel appointment' },
       { status: 500 }
     );
   }

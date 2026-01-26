@@ -21,6 +21,7 @@ model User {
   availability PriestAvailability @default(AVAILABLE)
   createdAt    DateTime           @default(now())
   updatedAt    DateTime           @updatedAt
+  deletedAt    DateTime?          // Soft delete timestamp
 
   // Relations
   appointments        Appointment[] @relation("CreatedByUser") // Appointments created by this user
@@ -128,6 +129,7 @@ model Appointment {
   // Timestamps
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
+  deletedAt     DateTime?         // Soft delete timestamp
 
   @@index([sacramentType])
   @@index([scheduledDate])
@@ -157,7 +159,8 @@ model Payment {
   
   // Timestamps
   createdAt       DateTime      @default(now())
-  
+  deletedAt       DateTime?     // Soft delete timestamp
+
   @@index([createdAt])
   @@index([processedById])
   @@index([paymentMethod])

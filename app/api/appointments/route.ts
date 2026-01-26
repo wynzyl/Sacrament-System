@@ -36,13 +36,16 @@ export async function GET(request: NextRequest) {
         status: {
           notIn: ['COMPLETED', 'CANCELLED'],
         },
+        deletedAt: null,
       },
       data: {
         status: 'COMPLETED',
       },
     });
 
-    const where: any = {};
+    const where: any = {
+      deletedAt: null, // Always filter out soft-deleted records
+    };
 
     if (status) {
       where.status = status;
@@ -166,7 +169,7 @@ export async function POST(request: NextRequest) {
         scheduledTime,
         location: location || 'Immaculate Conception Cathedral Parish',
         notes,
-        status: status || 'PENDING',
+        status: 'PENDING', // Always PENDING for new appointments
         fee: fee || 0,
         createdById: user.id, // Use session user's ID
         assignedPriestId: assignedPriestId || null,

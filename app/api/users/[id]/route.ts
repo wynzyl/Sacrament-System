@@ -28,8 +28,8 @@ export async function GET(
 
     const { id } = await params;
 
-    const targetUser = await prisma.user.findUnique({
-      where: { id },
+    const targetUser = await prisma.user.findFirst({
+      where: { id, deletedAt: null },
       select: {
         id: true,
         email: true,
@@ -83,6 +83,19 @@ export async function PUT(
     }
 
     const { id } = await params;
+
+    // Check if user exists and is not soft-deleted
+    const existingUser = await prisma.user.findFirst({
+      where: { id, deletedAt: null },
+    });
+
+    if (!existingUser) {
+      return NextResponse.json(
+        { error: 'User not found' },
+        { status: 404 }
+      );
+    }
+
     const { email, password, name, role, status, availability } = await request.json();
 
     const updateData: any = {};
