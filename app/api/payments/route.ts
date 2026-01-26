@@ -70,7 +70,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(payment, { status: 201 });
   } catch (error) {
-    console.error('Payment creation error:', error);
     return NextResponse.json(
       { error: 'Failed to process payment' },
       { status: 500 }

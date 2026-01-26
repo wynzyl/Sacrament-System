@@ -70,7 +70,6 @@ export async function GET(
 
     return NextResponse.json(appointment);
   } catch (error) {
-    console.error('Error fetching appointment:', error);
     return NextResponse.json(
       { error: 'Failed to fetch appointment' },
       { status: 500 }
@@ -178,7 +177,6 @@ export async function PUT(
 
     return NextResponse.json(appointment);
   } catch (error) {
-    console.error('Error updating appointment:', error);
     return NextResponse.json(
       { error: 'Failed to update appointment' },
       { status: 500 }
@@ -231,7 +229,6 @@ export async function DELETE(
 
     return NextResponse.json({ message: 'Appointment cancelled successfully' });
   } catch (error) {
-    console.error('Error cancelling appointment:', error);
     return NextResponse.json(
       { error: 'Failed to cancel appointment' },
       { status: 500 }

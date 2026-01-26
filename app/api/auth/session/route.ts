@@ -19,7 +19,6 @@ export async function GET() {
       user,
     });
   } catch (error) {
-    console.error('Session check error:', error);
     return NextResponse.json(
       { error: 'An error occurred while checking session' },
       { status: 500 }
