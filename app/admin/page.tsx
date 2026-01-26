@@ -93,7 +93,29 @@ interface Payment {
   };
 }
 
-type TabType = 'dashboard' | 'appointments' | 'users' | 'priests' | 'payments';
+type TabType = 'dashboard' | 'appointments' | 'users' | 'priests' | 'payments' | 'reports';
+
+interface ReportAppointment {
+  id: string;
+  sacramentType: string;
+  participantName: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  notes: string | null;
+  assignedPriest?: { name: string } | null;
+}
+
+interface ReportPayment {
+  id: string;
+  amount: number;
+  paymentMethod: string;
+  createdAt: string;
+  appointment: {
+    participantName: string;
+    sacramentType: string;
+    scheduledDate: string;
+  };
+}
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -151,6 +173,14 @@ export default function AdminDashboard() {
   // Payments state
   const [payments, setPayments] = useState<Payment[]>([]);
   const [paymentSummary, setPaymentSummary] = useState({ cash: 0, gcash: 0, total: 0 });
+
+  // Reports state
+  const [reportType, setReportType] = useState<'appointments' | 'collections'>('appointments');
+  const [reportFromDate, setReportFromDate] = useState('');
+  const [reportToDate, setReportToDate] = useState('');
+  const [reportData, setReportData] = useState<ReportAppointment[] | null>(null);
+  const [collectionsData, setCollectionsData] = useState<{ payments: ReportPayment[], totals: { cash: number, gcash: number, total: number } } | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
 
   useEffect(() => {
     // Check session via API
@@ -537,6 +567,166 @@ export default function AdminDashboard() {
     }
   };
 
+  // Report functions
+  const fetchReport = async () => {
+    if (!reportFromDate || !reportToDate) {
+      alert('Please select both From and To dates');
+      return;
+    }
+
+    setReportLoading(true);
+    try {
+      if (reportType === 'appointments') {
+        const response = await fetch(`/api/reports/appointments?from=${reportFromDate}&to=${reportToDate}`);
+        const data = await response.json();
+        setReportData(data);
+        setCollectionsData(null);
+      } else {
+        const response = await fetch(`/api/reports/collections?from=${reportFromDate}&to=${reportToDate}`);
+        const data = await response.json();
+        setCollectionsData(data);
+        setReportData(null);
+      }
+    } catch (error) {
+      alert('Failed to fetch report data');
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const exportToPDF = async () => {
+    const jsPDFModule = await import('jspdf');
+    const jsPDF = jsPDFModule.default;
+    const autoTable = (await import('jspdf-autotable')).default;
+
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+
+    // Header
+    doc.setFontSize(16);
+    doc.text('Immaculate Conception Cathedral Parish', pageWidth / 2, 15, { align: 'center' });
+    doc.setFontSize(12);
+    doc.text(reportType === 'appointments' ? 'Confirmed Appointments Report' : 'Collections Report', pageWidth / 2, 22, { align: 'center' });
+    doc.setFontSize(10);
+    doc.text(`Date Range: ${formatDate(reportFromDate)} - ${formatDate(reportToDate)}`, pageWidth / 2, 29, { align: 'center' });
+
+    if (reportType === 'appointments' && reportData) {
+      // Group by date
+      const grouped = reportData.reduce((acc, apt) => {
+        const date = formatDate(apt.scheduledDate);
+        if (!acc[date]) acc[date] = [];
+        acc[date].push(apt);
+        return acc;
+      }, {} as Record<string, ReportAppointment[]>);
+
+      let startY = 38;
+      Object.entries(grouped).forEach(([date, apts]) => {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(date, 14, startY);
+        startY += 2;
+
+        autoTable(doc, {
+          startY: startY,
+          head: [['Participant', 'Sacrament', 'Time', 'Priest', 'Notes']],
+          body: apts.map(apt => [
+            apt.participantName,
+            apt.sacramentType.replace('_', ' '),
+            apt.scheduledTime,
+            apt.assignedPriest?.name || 'Not assigned',
+            apt.notes || '-'
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [59, 130, 246] },
+          margin: { left: 14, right: 14 },
+          styles: { fontSize: 9 },
+        });
+
+        startY = (doc as any).lastAutoTable.finalY + 10;
+      });
+    } else if (reportType === 'collections' && collectionsData) {
+      // Format amount without currency symbol
+      const formatAmount = (amount: number) => {
+        return new Intl.NumberFormat('en-PH', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }).format(amount);
+      };
+
+      // Group by date
+      const grouped = collectionsData.payments.reduce((acc, payment) => {
+        const date = formatDate(payment.createdAt);
+        if (!acc[date]) acc[date] = [];
+        acc[date].push(payment);
+        return acc;
+      }, {} as Record<string, ReportPayment[]>);
+
+      // Sort each group by sacrament type
+      Object.keys(grouped).forEach(date => {
+        grouped[date].sort((a, b) =>
+          a.appointment.sacramentType.localeCompare(b.appointment.sacramentType)
+        );
+      });
+
+      let startY = 38;
+      Object.entries(grouped).forEach(([date, payments]) => {
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(date, 14, startY);
+        startY += 2;
+
+        autoTable(doc, {
+          startY: startY,
+          head: [['Participant', 'Sacrament', 'Amount', 'Method']],
+          body: payments.map(p => [
+            p.appointment.participantName,
+            p.appointment.sacramentType.replace('_', ' '),
+            formatAmount(p.amount),
+            p.paymentMethod
+          ]),
+          theme: 'striped',
+          headStyles: { fillColor: [34, 197, 94] },
+          margin: { left: 14, right: 14 },
+          styles: { fontSize: 9 },
+          columnStyles: {
+            2: { halign: 'right' },
+          },
+        });
+
+        startY = (doc as any).lastAutoTable.finalY + 10;
+      });
+
+      // Totals
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Summary', 14, startY);
+      autoTable(doc, {
+        startY: startY + 2,
+        head: [['Cash', 'GCash', 'Total']],
+        body: [[
+          formatAmount(collectionsData.totals.cash),
+          formatAmount(collectionsData.totals.gcash),
+          formatAmount(collectionsData.totals.total)
+        ]],
+        theme: 'grid',
+        headStyles: { fillColor: [107, 114, 128] },
+        margin: { left: 14, right: 14 },
+        styles: { fontSize: 10, halign: 'right' },
+      });
+    }
+
+    // Footer
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.text(`Generated on ${new Date().toLocaleString()}`, 14, doc.internal.pageSize.getHeight() - 10);
+      doc.text(`Page ${i} of ${pageCount}`, pageWidth - 14, doc.internal.pageSize.getHeight() - 10, { align: 'right' });
+    }
+
+    doc.save(`${reportType}-report-${reportFromDate}-to-${reportToDate}.pdf`);
+  };
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Loading...</div>;
   }
@@ -574,6 +764,7 @@ export default function AdminDashboard() {
               { id: 'users', label: 'Users', icon: '👥' },
               { id: 'priests', label: 'Priests', icon: '⛪' },
               { id: 'payments', label: 'Payments', icon: '💰' },
+              { id: 'reports', label: 'Reports', icon: '📋' },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -951,6 +1142,191 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Reports Tab */}
+        {activeTab === 'reports' && (
+          <div>
+            <h2 className="text-xl font-bold mb-6">Reports</h2>
+
+            {/* Report Controls */}
+            <div className="bg-white p-6 rounded-lg shadow mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Report Type</label>
+                  <select
+                    value={reportType}
+                    onChange={(e) => {
+                      setReportType(e.target.value as 'appointments' | 'collections');
+                      setReportData(null);
+                      setCollectionsData(null);
+                    }}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  >
+                    <option value="appointments">Confirmed Appointments</option>
+                    <option value="collections">Collections</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">From Date</label>
+                  <input
+                    type="date"
+                    value={reportFromDate}
+                    onChange={(e) => setReportFromDate(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">To Date</label>
+                  <input
+                    type="date"
+                    value={reportToDate}
+                    onChange={(e) => setReportToDate(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={fetchReport}
+                    disabled={reportLoading}
+                    className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    {reportLoading ? 'Loading...' : 'Generate'}
+                  </button>
+                  {(reportData || collectionsData) && (
+                    <button
+                      onClick={exportToPDF}
+                      className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                    >
+                      Export PDF
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Appointments Report Preview */}
+            {reportType === 'appointments' && reportData && (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="px-6 py-4 border-b bg-gray-50">
+                  <h3 className="text-lg font-bold">Confirmed Appointments Report</h3>
+                  <p className="text-sm text-gray-600">{reportData.length} appointment(s) found</p>
+                </div>
+                {reportData.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500">No appointments found for the selected date range</div>
+                ) : (
+                  (() => {
+                    const grouped = reportData.reduce((acc, apt) => {
+                      const date = formatDate(apt.scheduledDate);
+                      if (!acc[date]) acc[date] = [];
+                      acc[date].push(apt);
+                      return acc;
+                    }, {} as Record<string, ReportAppointment[]>);
+
+                    return Object.entries(grouped).map(([date, apts]) => (
+                      <div key={date} className="border-b last:border-b-0">
+                        <div className="bg-blue-50 px-6 py-2 font-semibold text-blue-800">{date}</div>
+                        <table className="min-w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Participant</th>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sacrament</th>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Time</th>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Priest</th>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {apts.map((apt) => (
+                              <tr key={apt.id}>
+                                <td className="px-6 py-3 text-sm">{apt.participantName}</td>
+                                <td className="px-6 py-3 text-sm">{apt.sacramentType.replace('_', ' ')}</td>
+                                <td className="px-6 py-3 text-sm">{apt.scheduledTime}</td>
+                                <td className="px-6 py-3 text-sm">{apt.assignedPriest?.name || 'Not assigned'}</td>
+                                <td className="px-6 py-3 text-sm text-gray-500">{apt.notes || '-'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ));
+                  })()
+                )}
+              </div>
+            )}
+
+            {/* Collections Report Preview */}
+            {reportType === 'collections' && collectionsData && (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <div className="px-6 py-4 border-b bg-gray-50">
+                  <h3 className="text-lg font-bold">Collections Report</h3>
+                  <p className="text-sm text-gray-600">{collectionsData.payments.length} payment(s) found</p>
+                </div>
+
+                {/* Totals Summary */}
+                <div className="grid grid-cols-3 gap-4 p-4 bg-gray-100 border-b">
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">Cash</p>
+                    <p className="text-xl font-bold text-green-600">{formatCurrency(collectionsData.totals.cash)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">GCash</p>
+                    <p className="text-xl font-bold text-blue-600">{formatCurrency(collectionsData.totals.gcash)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-sm text-gray-600">Total</p>
+                    <p className="text-xl font-bold text-purple-600">{formatCurrency(collectionsData.totals.total)}</p>
+                  </div>
+                </div>
+
+                {collectionsData.payments.length === 0 ? (
+                  <div className="p-6 text-center text-gray-500">No payments found for the selected date range</div>
+                ) : (
+                  (() => {
+                    const grouped = collectionsData.payments.reduce((acc, payment) => {
+                      const date = formatDate(payment.createdAt);
+                      if (!acc[date]) acc[date] = [];
+                      acc[date].push(payment);
+                      return acc;
+                    }, {} as Record<string, ReportPayment[]>);
+
+                    // Sort each group by sacrament type
+                    Object.keys(grouped).forEach(date => {
+                      grouped[date].sort((a, b) =>
+                        a.appointment.sacramentType.localeCompare(b.appointment.sacramentType)
+                      );
+                    });
+
+                    return Object.entries(grouped).map(([date, payments]) => (
+                      <div key={date} className="border-b last:border-b-0">
+                        <div className="bg-green-50 px-6 py-2 font-semibold text-green-800">{date}</div>
+                        <table className="min-w-full">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Participant</th>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sacrament</th>
+                              <th className="px-6 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                              <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {payments.map((p) => (
+                              <tr key={p.id}>
+                                <td className="px-6 py-3 text-sm">{p.appointment.participantName}</td>
+                                <td className="px-6 py-3 text-sm">{p.appointment.sacramentType.replace('_', ' ')}</td>
+                                <td className="px-6 py-3 text-sm font-semibold text-green-600 text-right">{formatCurrency(p.amount)}</td>
+                                <td className="px-6 py-3 text-sm">{p.paymentMethod}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ));
+                  })()
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

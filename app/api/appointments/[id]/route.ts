@@ -138,47 +138,34 @@ export async function PUT(
       }
     }
 
-    const {
-      sacramentType,
-      participantName,
-      participantPhone,
-      participantEmail,
-      barangay,
-      city,
-      province,
-      scheduledDate,
-      scheduledTime,
-      location,
-      notes,
-      status,
-      fee,
-      assignedPriestId,
-    } = data;
+    // Build update data object with only provided fields
+    const updateData: any = {};
+
+    if (data.sacramentType !== undefined) updateData.sacramentType = data.sacramentType;
+    if (data.participantName !== undefined) updateData.participantName = data.participantName;
+    if (data.participantPhone !== undefined) updateData.participantPhone = data.participantPhone;
+    if (data.participantEmail !== undefined) updateData.participantEmail = data.participantEmail;
+    if (data.barangay !== undefined) updateData.barangay = data.barangay;
+    if (data.city !== undefined) updateData.city = data.city;
+    if (data.province !== undefined) updateData.province = data.province;
+    if (data.scheduledDate !== undefined) updateData.scheduledDate = new Date(data.scheduledDate);
+    if (data.scheduledTime !== undefined) updateData.scheduledTime = data.scheduledTime;
+    if (data.location !== undefined) updateData.location = data.location;
+    if (data.notes !== undefined) updateData.notes = data.notes;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.fee !== undefined) updateData.fee = data.fee;
+    if (data.assignedPriestId !== undefined) updateData.assignedPriestId = data.assignedPriestId;
 
     const appointment = await prisma.appointment.update({
       where: { id },
-      data: {
-        sacramentType,
-        participantName,
-        participantPhone,
-        participantEmail,
-        barangay,
-        city,
-        province,
-        scheduledDate: scheduledDate ? new Date(scheduledDate) : undefined,
-        scheduledTime,
-        location,
-        notes,
-        status,
-        fee,
-        assignedPriestId: assignedPriestId !== undefined ? assignedPriestId : undefined,
-      },
+      data: updateData,
     });
 
     return NextResponse.json(appointment);
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Update appointment error:', error?.message || error);
     return NextResponse.json(
-      { error: 'Failed to update appointment' },
+      { error: 'Failed to update appointment', details: error?.message },
       { status: 500 }
     );
   }
