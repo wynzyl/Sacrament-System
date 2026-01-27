@@ -5,6 +5,13 @@ import { DatePresetButtons } from '@/components/DatePresetButtons';
 import { formatDate } from '@/lib/utils';
 import { ReportAppointment, User } from '@/types';
 
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 interface PriestReportsProps {
   user: User | null;
 }
@@ -46,7 +53,7 @@ export function PriestReports({ user }: PriestReportsProps) {
 
     const groupedByDate: { [key: string]: ReportAppointment[] } = {};
     reportData.forEach((apt) => {
-      const date = new Date(apt.scheduledDate).toISOString().split('T')[0];
+      const date = toLocalDateStr(new Date(apt.scheduledDate));
       if (!groupedByDate[date]) groupedByDate[date] = [];
       groupedByDate[date].push(apt);
     });
@@ -85,7 +92,7 @@ export function PriestReports({ user }: PriestReportsProps) {
   // Group for display
   const groupedByDate: { [key: string]: ReportAppointment[] } = {};
   reportData.forEach((apt) => {
-    const date = new Date(apt.scheduledDate).toISOString().split('T')[0];
+    const date = toLocalDateStr(new Date(apt.scheduledDate));
     if (!groupedByDate[date]) groupedByDate[date] = [];
     groupedByDate[date].push(apt);
   });

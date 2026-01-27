@@ -12,6 +12,10 @@ export function usePayments() {
     setLoading(true);
     try {
       const response = await fetch('/api/payments/today');
+      if (!response.ok) {
+        console.error('Failed to fetch payments:', response.status, response.statusText);
+        return;
+      }
       const data = await response.json();
       setPayments(data.payments || []);
       setSummary(data.summary || { cash: 0, gcash: 0, total: 0 });

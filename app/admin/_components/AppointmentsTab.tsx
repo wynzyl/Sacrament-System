@@ -17,11 +17,12 @@ interface AppointmentsTabProps {
 }
 
 export function AppointmentsTab({ initialAppointments, onDataChange }: AppointmentsTabProps) {
-  const { appointments, fetchAppointments, createAppointment, updateAppointment, cancelAppointment } = useAppointments();
+  const { appointments, loading: isAppointmentsLoading, fetchAppointments, createAppointment, updateAppointment, cancelAppointment } = useAppointments();
   const { availablePriests, fetchPriests } = usePriests();
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<AppointmentFormData>({ ...DEFAULT_APPOINTMENT_FORM });
+  const [hasFetched, setHasFetched] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -33,11 +34,11 @@ export function AppointmentsTab({ initialAppointments, onDataChange }: Appointme
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
-    fetchAppointments({ activeOnly: 'true' });
+    fetchAppointments({ activeOnly: 'true' }).then(() => setHasFetched(true));
     fetchPriests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const data = appointments.length > 0 ? appointments : (initialAppointments || []);
+  const data = hasFetched ? appointments : (initialAppointments || []);
 
   const resetForm = () => {
     setEditingId(null);

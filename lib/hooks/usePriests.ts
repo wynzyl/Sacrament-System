@@ -11,6 +11,10 @@ export function usePriests() {
     setLoading(true);
     try {
       const response = await fetch('/api/users?role=PRIEST');
+      if (!response.ok) {
+        console.error('Failed to fetch priests:', response.status, response.statusText);
+        return;
+      }
       const data = await response.json();
       setPriests(data);
     } catch (error) {

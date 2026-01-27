@@ -5,7 +5,12 @@ interface DatePresetButtonsProps {
 }
 
 export function DatePresetButtons({ onSetDates }: DatePresetButtonsProps) {
-  const toDateStr = (d: Date) => d.toISOString().split('T')[0];
+  const toDateStr = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
 
   return (
     <div className="mb-4">

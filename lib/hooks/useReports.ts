@@ -14,6 +14,9 @@ export function useReports() {
     try {
       const params = new URLSearchParams({ from, to, ...extraParams });
       const response = await fetch(`/api/reports/appointments?${params}`);
+      if (!response.ok) {
+        throw new Error(`Appointments report failed: ${response.status} ${response.statusText}`);
+      }
       const data = await response.json();
       setReportData(data);
       setCollectionsData(null);
@@ -29,6 +32,9 @@ export function useReports() {
     try {
       const params = new URLSearchParams({ from, to });
       const response = await fetch(`/api/reports/collections?${params}`);
+      if (!response.ok) {
+        throw new Error(`Collections report failed: ${response.status} ${response.statusText}`);
+      }
       const data = await response.json();
       setCollectionsData(data);
       setReportData(null);

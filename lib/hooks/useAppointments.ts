@@ -21,11 +21,25 @@ export function useAppointments() {
     }
   }, []);
 
+  const buildPayload = (formData: Record<string, any>) => {
+    const payload = { ...formData };
+    if (formData.fee !== undefined && formData.fee !== '') {
+      const parsed = parseFloat(formData.fee);
+      if (!Number.isFinite(parsed)) {
+        throw new Error('Invalid fee value');
+      }
+      payload.fee = parsed;
+    } else {
+      delete payload.fee;
+    }
+    return payload;
+  };
+
   const createAppointment = useCallback(async (formData: Record<string, any>) => {
     const response = await fetch('/api/appointments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...formData, fee: parseFloat(formData.fee) }),
+      body: JSON.stringify(buildPayload(formData)),
     });
     if (!response.ok) throw new Error('Failed to save appointment');
     return response.json();
@@ -35,7 +49,7 @@ export function useAppointments() {
     const response = await fetch(`/api/appointments/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...formData, fee: parseFloat(formData.fee) }),
+      body: JSON.stringify(buildPayload(formData)),
     });
     if (!response.ok) throw new Error('Failed to save appointment');
     return response.json();

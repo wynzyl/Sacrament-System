@@ -31,15 +31,20 @@ export function AppointmentsList() {
     return apt.status === filter;
   });
 
-  const today = new Date().toISOString().split('T')[0];
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const endOfToday = new Date(startOfToday);
+  endOfToday.setHours(23, 59, 59, 999);
+
   const todayAppointments = appointments.filter(apt => {
-    const aptDate = new Date(apt.scheduledDate).toISOString().split('T')[0];
-    return aptDate === today && apt.status !== 'CANCELLED';
+    const aptDate = new Date(apt.scheduledDate);
+    return aptDate >= startOfToday && aptDate <= endOfToday && apt.status !== 'CANCELLED';
   });
 
-  const upcomingConfirmed = appointments.filter(apt =>
-    apt.status === 'CONFIRMED' && new Date(apt.scheduledDate) >= new Date()
-  );
+  const upcomingConfirmed = appointments.filter(apt => {
+    const aptDate = new Date(apt.scheduledDate);
+    return aptDate >= startOfToday && apt.status === 'CONFIRMED';
+  });
 
   return (
     <>
