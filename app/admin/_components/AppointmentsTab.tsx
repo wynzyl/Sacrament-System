@@ -33,7 +33,7 @@ export function AppointmentsTab({ initialAppointments, onDataChange }: Appointme
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   useEffect(() => {
-    fetchAppointments({ activeOnly: 'true' });
+    fetchAppointments();
     fetchPriests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -56,7 +56,7 @@ export function AppointmentsTab({ initialAppointments, onDataChange }: Appointme
       }
       setShowModal(false);
       resetForm();
-      fetchAppointments({ activeOnly: 'true' });
+      fetchAppointments();
       onDataChange?.();
     } catch {
       alert('Error saving appointment');
@@ -89,7 +89,7 @@ export function AppointmentsTab({ initialAppointments, onDataChange }: Appointme
     try {
       await cancelAppointment(id);
       alert('Appointment cancelled!');
-      fetchAppointments({ activeOnly: 'true' });
+      fetchAppointments();
       onDataChange?.();
     } catch {
       alert('Error cancelling appointment');
@@ -131,7 +131,9 @@ export function AppointmentsTab({ initialAppointments, onDataChange }: Appointme
   return (
     <div>
       <div className="mb-6 flex justify-between items-center">
-        <h2 className="text-xl font-bold">All Appointments</h2>
+        <h2 className="text-xl font-bold">
+          {statusFilter === 'all' ? 'All' : statusFilter} Appointments
+        </h2>
         <button onClick={() => { resetForm(); setShowModal(true); }} className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
           + New Appointment
         </button>

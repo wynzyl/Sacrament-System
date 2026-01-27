@@ -23,7 +23,8 @@ export function CashierReports({ user }: CashierReportsProps) {
       const response = await fetch(`/api/reports/collections?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setCollectionsData(data);
+        // API returns { payments, totals } — extract the payments array
+        setCollectionsData(Array.isArray(data) ? data : data.payments ?? []);
       }
     } catch (error) {
       console.error('Error fetching report:', error);
