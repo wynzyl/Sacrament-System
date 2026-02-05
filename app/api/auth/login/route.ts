@@ -60,6 +60,7 @@ export async function POST(request: NextRequest) {
       user: userWithoutPassword,
     });
   } catch (error) {
+    console.error('Login error:', error);
     return NextResponse.json(
       { error: 'An error occurred during login' },
       { status: 500 }
