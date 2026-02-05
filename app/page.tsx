@@ -196,10 +196,10 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-blue-100 text-xs mt-6">
-          © 2026 Sacrament Management and Payment Monitoring System. 
-          <p className="text-center text-blue-100 text-xs mt-1">All rights reserved.</p>
-        </p>
+        <div className="text-center text-blue-100 text-xs mt-6">
+          <p>© 2026 Sacrament Management and Payment Monitoring System.</p>
+          <p className="mt-1">All rights reserved.</p>
+        </div>
       </div>
     </div>
   );

@@ -154,7 +154,7 @@ export async function PUT(
     if (data.notes !== undefined) updateData.notes = data.notes;
     if (data.status !== undefined) updateData.status = data.status;
     if (data.fee !== undefined) updateData.fee = data.fee;
-    if (data.assignedPriestId !== undefined) updateData.assignedPriestId = data.assignedPriestId;
+    if (data.assignedPriestId !== undefined) updateData.assignedPriestId = data.assignedPriestId || null;
 
     const appointment = await prisma.appointment.update({
       where: { id },
