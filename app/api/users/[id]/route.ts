@@ -99,7 +99,7 @@ export async function PUT(
 
     const updateData: any = {};
 
-    if (email) updateData.email = email;
+    if (typeof email === 'string' && email.trim()) updateData.email = email.trim().toLowerCase();
     if (name) updateData.name = name;
     if (role) updateData.role = role;
     if (status) updateData.status = status;
