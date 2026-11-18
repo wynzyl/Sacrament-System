@@ -73,7 +73,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { email, password, name, role, status, availability } = await request.json();
+    const { email: rawEmail, password, name, role, status, availability } = await request.json();
+    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
 
     // Validate required fields
     if (!email || !password || !name || !role) {

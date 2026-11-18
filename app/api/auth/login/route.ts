@@ -8,7 +8,9 @@ import { comparePassword, createSession, setSessionCookie } from '@/lib/auth';
 export async function POST(request: NextRequest) {
   try {
     // Get email and password from request body
-    const { email, password } = await request.json();
+    const body = await request.json();
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
 
     // Validate input
     if (!email || !password) {
@@ -18,9 +20,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find user by email
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Find user by email (case-insensitive, ignoring soft-deleted users)
+    const user = await prisma.user.findFirst({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        deletedAt: null,
+      },
     });
 
     // Check if user exists
