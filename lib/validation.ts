@@ -333,3 +333,37 @@ export const emailTokenVerifySchema = z.object({
     .max(200),
 });
 export type EmailTokenVerifyInput = z.infer<typeof emailTokenVerifySchema>;
+
+// ---------------------------------------------------------------------------
+// Email Notification Outbox (FEAT-S3)
+// ---------------------------------------------------------------------------
+
+export const notificationTemplateSchema = z.enum(
+  [
+    'BOOKING_RECEIVED',
+    'FEE_ASSESSED',
+    'DOCUMENT_FEEDBACK',
+    'SCHEDULE_CONFIRMED',
+    'APPOINTMENT_CANCELLED',
+  ],
+  { error: 'Choose a valid notification template' }
+);
+
+export const notificationQuerySchema = z.object({
+  referenceNumber: z.string().trim().max(40).optional(),
+  recipientEmail: z.string().trim().max(160).optional(),
+  template: notificationTemplateSchema.optional(),
+  appointmentId: z.string().trim().max(80).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+export const notificationSendSchema = z.object({
+  appointmentId: z.string({ error: 'Appointment is required' }).trim().min(1, 'Appointment is required'),
+  template: notificationTemplateSchema,
+  customMessage: optText(500),
+  requirementLabel: optText(160),
+  requirementStatus: z
+    .enum(['VERIFIED', 'RESUBMIT_REQUIRED', 'PENDING_SUBMISSION'])
+    .optional(),
+});
+export type NotificationSendInput = z.infer<typeof notificationSendSchema>;

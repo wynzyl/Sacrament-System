@@ -15,6 +15,7 @@ import { UsersTab } from './_components/UsersTab';
 import { PriestsTab } from './_components/PriestsTab';
 import { PaymentsTab } from './_components/PaymentsTab';
 import { ReportsTab } from './_components/ReportsTab';
+import { NotificationsOutboxTab } from './_components/NotificationsOutboxTab';
 import { AuditLogTab } from './_components/AuditLogTab';
 import { useAppointments } from '@/lib/hooks/useAppointments';
 import { useUsers } from '@/lib/hooks/useUsers';
@@ -31,6 +32,7 @@ const TABS: { id: TabType; label: string; icon: string }[] = [
   { id: 'priests', label: 'Priests', icon: '\u26EA' },
   { id: 'payments', label: 'Payments', icon: '\uD83D\uDCB0' },
   { id: 'reports', label: 'Reports', icon: '\uD83D\uDCCB' },
+  { id: 'notifications', label: 'Email Outbox', icon: '\u2709\uFE0F' },
   { id: 'audit', label: 'Audit Log', icon: '\uD83D\uDEE1\uFE0F' },
 ];
 
@@ -110,6 +112,9 @@ export default function AdminDashboard() {
           />
         )}
         {activeTab === 'reports' && <ReportsTab />}
+        {activeTab === 'notifications' && (
+          <NotificationsOutboxTab appointments={appointments} />
+        )}
         {activeTab === 'audit' && <AuditLogTab />}
       </div>
     </div>

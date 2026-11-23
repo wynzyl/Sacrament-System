@@ -28,6 +28,7 @@ import {
 import { createReversalEntry, lockAppointmentRow, netPaidCentavos } from '@/lib/payments/ledger';
 import { fromCentavos, toCentavos } from '@/lib/money';
 import { DEFAULT_CITY, DEFAULT_LOCATION, DEFAULT_PROVINCE } from '@/lib/constants';
+import { dispatchAppointmentNotificationById } from '@/lib/notifications';
 import type {
   AppointmentCreateInput,
   AppointmentUpdateInput,
@@ -248,8 +249,41 @@ export async function updateAppointment(
         after: diff.after,
       });
     }
+    return {
+      updated,
+      justConfirmed: statusChanged && updated.status === 'CONFIRMED',
+      feeChanged:
+        input.fee !== undefined &&
+        toCentavos(input.fee) !== toCentavos(existing.fee) &&
+        toCentavos(updated.fee) > 0,
+    };
+  }, TX_OPTIONS).then(async ({ updated, justConfirmed, feeChanged }) => {
+    if (updated.participantEmail) {
+      if (feeChanged) {
+        try {
+          await dispatchAppointmentNotificationById({
+            appointmentId: updated.id,
+            template: 'FEE_ASSESSED',
+            actor: userActor(actor),
+          });
+        } catch {
+          // Do not fail update if notification dispatch fails
+        }
+      }
+      if (justConfirmed) {
+        try {
+          await dispatchAppointmentNotificationById({
+            appointmentId: updated.id,
+            template: 'SCHEDULE_CONFIRMED',
+            actor: userActor(actor),
+          });
+        } catch {
+          // Do not fail update if notification dispatch fails
+        }
+      }
+    }
     return updated;
-  }, TX_OPTIONS);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -313,8 +347,27 @@ export async function cancelAppointment(
       reason: input.reason,
     });
 
-    return { appointment: updated, refundedCentavos: refunded };
-  }, TX_OPTIONS);
+    return {
+      appointment: updated,
+      refundedCentavos: refunded,
+      disposition: (paid > 0 ? input.paymentDisposition : 'NONE') as 'REFUND' | 'FORFEIT' | 'NONE',
+    };
+  }, TX_OPTIONS).then(async ({ appointment, refundedCentavos, disposition }) => {
+    if (appointment.participantEmail) {
+      try {
+        await dispatchAppointmentNotificationById({
+          appointmentId: appointment.id,
+          template: 'APPOINTMENT_CANCELLED',
+          paymentDisposition: disposition,
+          refundedAmount: fromCentavos(refundedCentavos),
+          actor: userActor(actor),
+        });
+      } catch {
+        // Do not fail cancellation if notification dispatch fails
+      }
+    }
+    return { appointment, refundedCentavos };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -407,5 +460,18 @@ export async function setRequirement(actor: SessionUser, appointmentId: string, 
       after: { appointmentId, key, isMet },
     });
     return updated;
-  }, TX_OPTIONS);
+  }, TX_OPTIONS).then(async (updated) => {
+    try {
+      await dispatchAppointmentNotificationById({
+        appointmentId,
+        template: 'DOCUMENT_FEEDBACK',
+        requirementLabel: updated.label,
+        requirementStatus: isMet ? 'VERIFIED' : 'RESUBMIT_REQUIRED',
+        actor: userActor(actor),
+      });
+    } catch {
+      // Ignore if appointment has no email on file
+    }
+    return updated;
+  });
 }

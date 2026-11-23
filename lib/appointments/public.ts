@@ -15,6 +15,7 @@ import { assertNoScheduleConflict, loadDaySchedule, lockScheduleDate } from '@/l
 import { TX_OPTIONS, withReferenceRetry } from '@/lib/appointments/service';
 import { balanceDueCentavos, fromCentavos, sumCentavos } from '@/lib/money';
 import { DEFAULT_CITY, DEFAULT_LOCATION, DEFAULT_PROVINCE } from '@/lib/constants';
+import { dispatchParishNotification } from '@/lib/notifications';
 import type { PublicBookingInput } from '@/lib/validation';
 
 export function isPublicBookingEnabled(): boolean {
@@ -100,13 +101,38 @@ export async function createOnlineBooking(
     }, TX_OPTIONS)
   );
 
+  const requirements = requirementsFor(appointment.sacramentType);
+  const recipientEmail = actor?.email ?? input.participantEmail ?? null;
+
+  if (recipientEmail) {
+    try {
+      await dispatchParishNotification({
+        template: 'BOOKING_RECEIVED',
+        appointmentId: appointment.id,
+        referenceNumber: appointment.referenceNumber,
+        sacramentType: appointment.sacramentType,
+        participantName: input.participantName,
+        recipientEmail,
+        scheduledDate: input.scheduledDate,
+        scheduledTime: appointment.scheduledTime,
+        location: appointment.location,
+        requirementsSummary: requirements.map((r) => ({ label: r.label, isMet: false })),
+        actor: actor ? userActor(actor) : PUBLIC_ACTOR,
+        db: prisma,
+        now,
+      });
+    } catch {
+      // Never block an online booking if email dispatch fails
+    }
+  }
+
   return {
     referenceNumber: appointment.referenceNumber,
     sacramentType: appointment.sacramentType,
     scheduledDate: input.scheduledDate,
     scheduledTime: appointment.scheduledTime,
     status: appointment.status,
-    requirements: requirementsFor(appointment.sacramentType),
+    requirements,
   };
 }
 

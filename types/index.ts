@@ -251,6 +251,7 @@ export type AdminTabType =
   | 'priests'
   | 'payments'
   | 'reports'
+  | 'notifications'
   | 'audit';
 export type CashierTabType = 'payments' | 'reports';
 export type PriestTabType = 'appointments' | 'calendar' | 'reports';
