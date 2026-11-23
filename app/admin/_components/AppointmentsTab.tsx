@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useAppointments } from '@/lib/hooks/useAppointments';
 import { usePriests } from '@/lib/hooks/usePriests';
 import { Modal } from '@/components/Modal';
@@ -432,6 +433,14 @@ export function AppointmentsTab({ initialAppointments, onDataChange }: Appointme
                             )}
                           </td>
                           <td className="px-6 py-4 text-sm space-x-2 whitespace-nowrap">
+                            {apt.referenceNumber && (
+                              <Link
+                                href={`/pass/${encodeURIComponent(apt.referenceNumber)}`}
+                                className="text-emerald-700 hover:text-emerald-900 font-semibold"
+                              >
+                                Pass / OR
+                              </Link>
+                            )}
                             <button
                               onClick={() => handleEdit(apt)}
                               className="text-blue-600 hover:text-blue-900"

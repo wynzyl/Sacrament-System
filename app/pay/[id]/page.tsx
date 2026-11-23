@@ -185,7 +185,13 @@ export default function HostedCheckoutPage({ params }: PageProps) {
                       </div>
                     )}
                   </dl>
-                  <div className="pt-3">
+                  <div className="pt-3 space-y-2">
+                    <Link
+                      href={`/pass/${encodeURIComponent(session.appointment.referenceNumber)}`}
+                      className="block w-full text-center py-3 px-4 bg-slate-900 text-amber-300 font-bold rounded-lg hover:bg-slate-800"
+                    >
+                      🖨️ Download Official Receipt ({session.receiptNumber}) &amp; QR Pass
+                    </Link>
                     <Link
                       href={`/track?ref=${encodeURIComponent(session.appointment.referenceNumber)}`}
                       className="block w-full text-center py-3 px-4 bg-emerald-700 text-white font-semibold rounded-lg hover:bg-emerald-800"

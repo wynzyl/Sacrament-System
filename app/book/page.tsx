@@ -398,6 +398,12 @@ export default function PublicBookingPage() {
 
             <div className="flex flex-wrap gap-3 pt-2">
               <Link
+                href={`/pass/${encodeURIComponent(submitted.referenceNumber)}`}
+                className="px-4 py-2.5 bg-emerald-700 text-white rounded-lg font-semibold hover:bg-emerald-800 text-sm"
+              >
+                🖨️ View / Print QR Appointment Pass
+              </Link>
+              <Link
                 href={`/track?ref=${encodeURIComponent(submitted.referenceNumber)}`}
                 className="px-4 py-2.5 bg-blue-700 text-white rounded-lg font-semibold hover:bg-blue-800 text-sm"
               >
@@ -759,12 +765,18 @@ export default function PublicBookingPage() {
                           {formatDate(b.scheduledDate)} at {b.scheduledTime}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
                         {b.balanceDue > 0 && b.status !== 'CANCELLED' && (
                           <span className="text-xs font-semibold text-amber-800 bg-amber-50 px-2.5 py-1 rounded border border-amber-200">
                             Balance: {formatCurrency(b.balanceDue)}
                           </span>
                         )}
+                        <Link
+                          href={`/pass/${encodeURIComponent(b.referenceNumber)}`}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800"
+                        >
+                          QR Pass &amp; Receipt
+                        </Link>
                         <Link
                           href={`/track?ref=${encodeURIComponent(b.referenceNumber)}`}
                           className="px-3 py-1.5 rounded-lg bg-blue-700 text-white text-xs font-bold hover:bg-blue-800"

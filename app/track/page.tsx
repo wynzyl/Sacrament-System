@@ -402,6 +402,27 @@ function TrackContent() {
               </ul>
             </div>
           )}
+
+          {/* Downloadable Official Receipt & QR Appointment Confirmation Pass (FEAT-P3) */}
+          <div className="bg-slate-900 text-white rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-300">
+                Official Receipt &amp; QR Confirmation Pass
+              </p>
+              <p className="text-sm text-slate-200 mt-0.5">
+                View, print, or save as PDF your QR Appointment Pass and any Official Receipts (
+                <code className="font-mono">RCP-YYYY-NNNNN</code>) issued for this booking.
+              </p>
+            </div>
+            <Link
+              href={`/pass/${encodeURIComponent(result.referenceNumber)}?contact=${encodeURIComponent(
+                contact
+              )}`}
+              className="px-4 py-2.5 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold text-xs shadow whitespace-nowrap"
+            >
+              🖨️ Open QR Pass &amp; Official Receipt
+            </Link>
+          </div>
         </section>
       )}
     </main>

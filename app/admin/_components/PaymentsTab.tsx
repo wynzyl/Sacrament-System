@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { Modal } from '@/components/Modal';
@@ -162,18 +163,28 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
                         {channelText ? ` (${channelText})` : ''}
                       </p>
                       <p className="text-xs font-mono text-gray-500">{payment.receiptNumber}</p>
-                      {!isReversal && !alreadyReversed && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReverseTarget(payment);
-                            setReverseReason('');
-                          }}
-                          className="mt-2 text-xs text-red-600 hover:text-red-800 underline font-medium"
-                        >
-                          Reverse / Void
-                        </button>
-                      )}
+                      <div className="mt-2 flex flex-col items-end gap-1">
+                        {payment.appointment.referenceNumber && (
+                          <Link
+                            href={`/pass/${encodeURIComponent(payment.appointment.referenceNumber)}`}
+                            className="text-xs text-blue-600 hover:text-blue-800 underline font-medium"
+                          >
+                            Print OR &amp; QR Pass
+                          </Link>
+                        )}
+                        {!isReversal && !alreadyReversed && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReverseTarget(payment);
+                              setReverseReason('');
+                            }}
+                            className="text-xs text-red-600 hover:text-red-800 underline font-medium"
+                          >
+                            Reverse / Void
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
