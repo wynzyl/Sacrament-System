@@ -13,7 +13,8 @@ import { requirementsFor } from '@/lib/requirements';
 import { computeSlotAvailability, validateBookingDate } from '@/lib/scheduling';
 import { assertNoScheduleConflict, loadDaySchedule, lockScheduleDate } from '@/lib/appointments/conflicts';
 import { TX_OPTIONS, withReferenceRetry } from '@/lib/appointments/service';
-import { balanceDueCentavos, fromCentavos, sumCentavos } from '@/lib/money';
+import { balanceDueCentavos, fromCentavos, sumCentavos, toCentavos } from '@/lib/money';
+import { getArancelTariff } from '@/lib/arancel';
 import { DEFAULT_CITY, DEFAULT_LOCATION, DEFAULT_PROVINCE } from '@/lib/constants';
 import type { PublicBookingInput } from '@/lib/validation';
 
@@ -79,7 +80,7 @@ export async function createOnlineBooking(
           location: DEFAULT_LOCATION,
           notes: input.notes ?? null,
           status: 'PENDING', // never confirmed automatically
-          fee: 0, // the parish sets the fee when it reviews the request
+          fee: getArancelTariff(input.sacramentType).baseFee, // standard Diocesan Arancel base tariff
           createdById: actor?.id ?? null,
           requirements: {
             create: requirementsFor(input.sacramentType).map((r) => ({ key: r.key, label: r.label })),
@@ -106,6 +107,7 @@ export async function createOnlineBooking(
     scheduledDate: input.scheduledDate,
     scheduledTime: appointment.scheduledTime,
     status: appointment.status,
+    fee: fromCentavos(toCentavos(appointment.fee)),
     requirements: requirementsFor(appointment.sacramentType),
   };
 }
