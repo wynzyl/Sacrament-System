@@ -15,6 +15,12 @@ import { assertNoScheduleConflict, loadDaySchedule, lockScheduleDate } from '@/l
 import { TX_OPTIONS, withReferenceRetry } from '@/lib/appointments/service';
 import { balanceDueCentavos, fromCentavos, sumCentavos } from '@/lib/money';
 import { DEFAULT_CITY, DEFAULT_LOCATION, DEFAULT_PROVINCE } from '@/lib/constants';
+import {
+  buildAppointmentPassData,
+  buildOfficialReceiptData,
+  type AppointmentPassData,
+  type OfficialReceiptData,
+} from '@/lib/receiptPass';
 import type { PublicBookingInput } from '@/lib/validation';
 
 export function isPublicBookingEnabled(): boolean {
@@ -159,4 +165,67 @@ export async function trackBooking(reference: string, contact: string) {
     balanceDue: fromCentavos(balanceDueCentavos(appt.fee, paid)),
     requirements: appt.requirements,
   };
+}
+
+/**
+ * Retrieve the full QR Appointment Confirmation Pass and Official Receipts
+ * (`RCP-YYYY-NNNNN`) for a booking.
+ *
+ * Accessible when:
+ * 1) The caller has an active authenticated session as staff (`ADMIN`, `CASHIER`, `PRIEST`), OR
+ * 2) The caller has an active authenticated session as the booking owner (`createdById`, matching email, or matching phone), OR
+ * 3) The caller supplies a valid second-factor `contact` (mobile number or email used on the booking).
+ */
+export async function getAppointmentPassAndReceipts(
+  reference: string,
+  options: { contact?: string | null; actor?: SessionUser | null } = {}
+): Promise<{ pass: AppointmentPassData; receipts: OfficialReceiptData[] }> {
+  const normalizedRef = normalizeReference(reference);
+  const appt = await prisma.appointment.findFirst({
+    where: { referenceNumber: normalizedRef, deletedAt: null },
+    include: {
+      assignedPriest: { select: { name: true } },
+      requirements: {
+        select: { key: true, label: true, isMet: true, verifiedAt: true },
+        orderBy: { label: 'asc' },
+      },
+      payments: {
+        where: { deletedAt: null },
+        include: {
+          processedBy: { select: { name: true } },
+          reversal: { select: { id: true, receiptNumber: true } },
+          reversesPayment: { select: { id: true, receiptNumber: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+      },
+    },
+  });
+
+  if (!appt) throw new ApiError(404, NOT_FOUND);
+
+  const actor = options.actor;
+  const isStaff =
+    !!actor && (actor.role === 'ADMIN' || actor.role === 'CASHIER' || actor.role === 'PRIEST');
+  const isOwnerById = !!actor && !!appt.createdById && appt.createdById === actor.id;
+  const isOwnerByEmail =
+    !!actor &&
+    !!actor.email &&
+    !!appt.participantEmail &&
+    appt.participantEmail.trim().toLowerCase() === actor.email.trim().toLowerCase();
+  const isOwnerByPhone =
+    !!actor &&
+    !!actor.phone &&
+    phoneKey(actor.phone).length === 10 &&
+    phoneKey(actor.phone) === phoneKey(appt.participantPhone);
+  const isContactVerified =
+    !!options.contact && options.contact.trim().length > 0 && contactMatches(options.contact, appt);
+
+  if (!isStaff && !isOwnerById && !isOwnerByEmail && !isOwnerByPhone && !isContactVerified) {
+    throw new ApiError(404, NOT_FOUND);
+  }
+
+  const pass = buildAppointmentPassData(appt, appt.payments, appt.requirements);
+  const receipts = appt.payments.map((payment) => buildOfficialReceiptData(payment, appt));
+
+  return { pass, receipts };
 }

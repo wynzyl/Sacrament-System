@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { useAppointments } from '@/lib/hooks/useAppointments';
 import {
@@ -344,6 +345,14 @@ export function PaymentProcessing() {
                           {channelText ? ` (${channelText})` : ''}
                         </p>
                         <p className="text-xs font-mono text-gray-500">{payment.receiptNumber}</p>
+                        {payment.appointment.referenceNumber && (
+                          <Link
+                            href={`/pass/${encodeURIComponent(payment.appointment.referenceNumber)}`}
+                            className="inline-block mt-1 text-xs font-semibold text-blue-700 hover:text-blue-900 underline"
+                          >
+                            Print OR &amp; QR Pass
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </div>

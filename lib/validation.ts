@@ -266,6 +266,15 @@ export const trackSchema = z.object({
   contact: z.string().trim().min(5).max(160),
 });
 
+export const passLookupSchema = z.object({
+  reference: z.string().trim().min(6, 'Reference number is required').max(30),
+  contact: z.preprocess(
+    emptyToNull,
+    z.string().trim().min(5, 'Enter the mobile number or email used when booking').max(160).nullable().optional()
+  ),
+});
+export type PassLookupInput = z.infer<typeof passLookupSchema>;
+
 // ---------------------------------------------------------------------------
 // Users (admin)
 // ---------------------------------------------------------------------------
