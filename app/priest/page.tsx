@@ -10,6 +10,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { LoadingScreen } from '@/components/LoadingScreen';
 import { CalendarView } from '@/components/CalendarView';
 import { AppointmentsList } from './_components/AppointmentsList';
+import { AltarRunSheet } from './_components/AltarRunSheet';
 import { PriestReports } from './_components/PriestReports';
 import { PriestTabType } from '@/types';
 
@@ -17,6 +18,7 @@ type TabType = PriestTabType;
 
 const TABS: { id: TabType; label: string }[] = [
   { id: 'appointments', label: 'My Appointments' },
+  { id: 'runsheet', label: 'Altar Run-Sheet & Intentions' },
   { id: 'calendar', label: 'Calendar' },
   { id: 'reports', label: 'Reports' },
 ];
@@ -52,6 +54,7 @@ export default function PriestDashboard() {
         </div>
 
         {activeTab === 'appointments' && <AppointmentsList />}
+        {activeTab === 'runsheet' && <AltarRunSheet user={user} />}
         {activeTab === 'calendar' && <CalendarView showPriest={false} />}
         {activeTab === 'reports' && <PriestReports user={user} />}
       </div>
