@@ -253,7 +253,7 @@ export type AdminTabType =
   | 'reports'
   | 'audit';
 export type CashierTabType = 'payments' | 'reports';
-export type PriestTabType = 'appointments' | 'calendar' | 'reports';
+export type PriestTabType = 'appointments' | 'runsheet' | 'calendar' | 'reports';
 
 // ============================================
 // Filter & Sort Types
