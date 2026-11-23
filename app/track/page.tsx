@@ -16,6 +16,25 @@ import {
 } from '@/lib/constants';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
+interface VaultDocumentSummary {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  dataUrl: string;
+  uploadedBy: 'PARISHIONER' | 'STAFF';
+  uploadedAt: string;
+  reviewStatus: 'UPLOADED' | 'PRE_VERIFIED' | 'NEEDS_RESUBMISSION';
+  reviewerNote: string | null;
+}
+
+interface TrackedRequirementItem {
+  key?: string;
+  label: string;
+  isMet: boolean;
+  document?: VaultDocumentSummary | null;
+}
+
 interface TrackedBooking {
   referenceNumber: string;
   sacramentType: string;
@@ -26,7 +45,7 @@ interface TrackedBooking {
   fee: number;
   amountPaid: number;
   balanceDue: number;
-  requirements: { label: string; isMet: boolean }[];
+  requirements: TrackedRequirementItem[];
 }
 
 const STATUS_DESCRIPTIONS: Record<
@@ -76,10 +95,35 @@ function TrackContent() {
   const [startingCheckout, setStartingCheckout] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
 
+  // Digital Document Pre-Verification Vault state
+  const [vaultRequirements, setVaultRequirements] = useState<TrackedRequirementItem[]>([]);
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [vaultError, setVaultError] = useState('');
+  const [vaultSuccess, setVaultSuccess] = useState('');
+
   useEffect(() => {
     const refParam = searchParams.get('ref');
     if (refParam) setReference(refParam);
   }, [searchParams]);
+
+  const loadVaultDocuments = async (ref: string, contactInfo: string, fallbackReqs: TrackedRequirementItem[]) => {
+    try {
+      const qs = new URLSearchParams({ reference: ref, contact: contactInfo });
+      const res = await fetch(`/api/public/documents?${qs.toString()}`);
+      if (!res.ok) {
+        setVaultRequirements(fallbackReqs);
+        return;
+      }
+      const data = await res.json();
+      if (Array.isArray(data.requirements)) {
+        setVaultRequirements(data.requirements);
+      } else {
+        setVaultRequirements(fallbackReqs);
+      }
+    } catch {
+      setVaultRequirements(fallbackReqs);
+    }
+  };
 
   const handleMethodChange = (method: 'ONLINE_WALLET' | 'BANK_TRANSFER') => {
     setOnlineMethod(method);
@@ -94,7 +138,10 @@ function TrackContent() {
     e.preventDefault();
     setError('');
     setCheckoutError('');
+    setVaultError('');
+    setVaultSuccess('');
     setResult(null);
+    setVaultRequirements([]);
     setLoading(true);
     try {
       const res = await fetch('/api/public/track', {
@@ -107,10 +154,96 @@ function TrackContent() {
         throw new Error(data.error || 'Could not find a booking with those details.');
       }
       setResult(data);
+      await loadVaultDocuments(data.referenceNumber, contact, data.requirements || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An unexpected error occurred.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const readFileAsDataUrl = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = () => reject(new Error('Failed to read selected file.'));
+      reader.readAsDataURL(file);
+    });
+
+  const handleFileUpload = async (requirementKey: string, file: File | null) => {
+    if (!result || !file) return;
+    setVaultError('');
+    setVaultSuccess('');
+
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setVaultError('Unsupported file format. Please choose a PDF, JPG, PNG, or WEBP file.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setVaultError('File exceeds the 2 MB maximum size limit. Please compress or resize the scan.');
+      return;
+    }
+
+    setUploadingKey(requirementKey);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const res = await fetch('/api/public/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: result.referenceNumber,
+          contact,
+          requirementKey,
+          fileName: file.name,
+          mimeType: file.type,
+          sizeBytes: file.size,
+          dataUrl,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not upload document.');
+      }
+      if (Array.isArray(data.requirements)) {
+        setVaultRequirements(data.requirements);
+      }
+      setVaultSuccess(`Uploaded "${file.name}" for pre-verification.`);
+    } catch (err) {
+      setVaultError(err instanceof Error ? err.message : 'Failed to upload document.');
+    } finally {
+      setUploadingKey(null);
+    }
+  };
+
+  const handleQuickSampleUpload = async (requirementKey: string, label: string) => {
+    if (!result) return;
+    setVaultError('');
+    setVaultSuccess('');
+    setUploadingKey(requirementKey);
+    try {
+      const res = await fetch('/api/public/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: result.referenceNumber,
+          contact,
+          requirementKey,
+          quickSample: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not attach sample document.');
+      }
+      if (Array.isArray(data.requirements)) {
+        setVaultRequirements(data.requirements);
+      }
+      setVaultSuccess(`Attached digital copy for "${label}".`);
+    } catch (err) {
+      setVaultError(err instanceof Error ? err.message : 'Failed to attach digital copy.');
+    } finally {
+      setUploadingKey(null);
     }
   };
 
@@ -379,26 +512,149 @@ function TrackContent() {
             </div>
           )}
 
-          {result.requirements.length > 0 && (
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 mb-2">Requirements Checklist</h3>
+          {(vaultRequirements.length > 0 || result.requirements.length > 0) && (
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">
+                  Requirements Checklist &amp; Digital Document Pre-Verification Vault
+                </h3>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Upload clear digital copies (PDF, JPG, PNG, WEBP up to 2 MB) so the parish office
+                  can pre-verify your requirements before your visit.
+                </p>
+              </div>
+
+              {vaultError && (
+                <div
+                  role="alert"
+                  className="bg-red-50 border-l-4 border-red-600 p-3 rounded text-xs text-red-800"
+                >
+                  {vaultError}
+                </div>
+              )}
+
+              {vaultSuccess && (
+                <div
+                  role="status"
+                  className="bg-emerald-50 border-l-4 border-emerald-600 p-3 rounded text-xs text-emerald-900"
+                >
+                  {vaultSuccess}
+                </div>
+              )}
+
               <ul className="divide-y border rounded-lg text-sm">
-                {result.requirements.map((req, idx) => (
-                  <li key={idx} className="p-3 flex items-center justify-between gap-3">
-                    <span className={req.isMet ? 'line-through text-gray-500' : 'text-gray-800'}>
-                      {req.label}
-                    </span>
-                    <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded ${
-                        req.isMet
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}
-                    >
-                      {req.isMet ? 'Verified' : 'Required'}
-                    </span>
-                  </li>
-                ))}
+                {(vaultRequirements.length > 0 ? vaultRequirements : result.requirements).map(
+                  (req, idx) => {
+                    const reqKey = req.key || `req_${idx}`;
+                    const doc = req.document ?? null;
+                    const isUploading = uploadingKey === reqKey;
+
+                    let badgeText = req.isMet ? 'Pre-Verified ✓' : 'Required';
+                    let badgeClass = req.isMet
+                      ? 'bg-green-100 text-green-800 border-green-300'
+                      : 'bg-yellow-100 text-yellow-800 border-yellow-300';
+
+                    if (doc) {
+                      if (doc.reviewStatus === 'PRE_VERIFIED' || req.isMet) {
+                        badgeText = 'Pre-Verified ✓';
+                        badgeClass = 'bg-green-100 text-green-800 border-green-300';
+                      } else if (doc.reviewStatus === 'NEEDS_RESUBMISSION') {
+                        badgeText = 'Needs Resubmission';
+                        badgeClass = 'bg-red-100 text-red-800 border-red-300';
+                      } else {
+                        badgeText = 'Uploaded — Pending Review';
+                        badgeClass = 'bg-blue-100 text-blue-800 border-blue-300';
+                      }
+                    }
+
+                    return (
+                      <li key={reqKey} className="p-3.5 space-y-2">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <span
+                            className={
+                              req.isMet
+                                ? 'line-through text-gray-500 font-medium'
+                                : 'text-gray-900 font-medium'
+                            }
+                          >
+                            {req.label}
+                          </span>
+                          <span
+                            className={`text-xs font-semibold px-2.5 py-0.5 rounded-full border ${badgeClass}`}
+                          >
+                            {badgeText}
+                          </span>
+                        </div>
+
+                        {doc && (
+                          <div className="text-xs text-gray-600 bg-slate-50 border border-slate-200 rounded p-2 space-y-1">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="font-mono font-medium text-gray-800">
+                                {doc.fileName} ({Math.max(1, Math.round(doc.sizeBytes / 1024))} KB)
+                              </span>
+                              <span className="text-gray-500">
+                                Uploaded {formatDate(doc.uploadedAt)}
+                              </span>
+                            </div>
+                            {doc.reviewerNote && (
+                              <p
+                                className={`font-medium ${
+                                  doc.reviewStatus === 'NEEDS_RESUBMISSION'
+                                    ? 'text-red-700'
+                                    : 'text-emerald-800'
+                                }`}
+                              >
+                                Parish Office Note: {doc.reviewerNote}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {result.status !== 'CANCELLED' && req.key && (
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <label
+                              htmlFor={`upload-${reqKey}`}
+                              className={`cursor-pointer inline-flex items-center px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors ${
+                                isUploading
+                                  ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                                  : 'bg-white text-blue-700 border-blue-300 hover:bg-blue-50'
+                              }`}
+                            >
+                              {isUploading
+                                ? 'Uploading...'
+                                : doc
+                                  ? 'Replace File (PDF/JPG/PNG)'
+                                  : 'Upload File (PDF/JPG/PNG)'}
+                              <input
+                                id={`upload-${reqKey}`}
+                                type="file"
+                                accept=".pdf,image/jpeg,image/png,image/webp"
+                                disabled={isUploading}
+                                onChange={(e) => {
+                                  const f = e.target.files?.[0] ?? null;
+                                  void handleFileUpload(req.key!, f);
+                                  e.target.value = '';
+                                }}
+                                className="sr-only"
+                              />
+                            </label>
+
+                            {!doc && (
+                              <button
+                                type="button"
+                                disabled={isUploading}
+                                onClick={() => void handleQuickSampleUpload(req.key!, req.label)}
+                                className="px-2.5 py-1.5 rounded-md text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-50"
+                              >
+                                Quick-Attach Declaratory Copy
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  }
+                )}
               </ul>
             </div>
           )}

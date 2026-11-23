@@ -266,6 +266,33 @@ export const trackSchema = z.object({
   contact: z.string().trim().min(5).max(160),
 });
 
+export const publicDocumentQuerySchema = z.object({
+  reference: z.string().trim().min(6).max(30),
+  contact: z.preprocess(emptyToNull, z.string().trim().min(5).max(160).nullable().optional()),
+});
+
+export const publicDocumentUploadSchema = z.object({
+  reference: z.string().trim().min(6).max(30),
+  contact: z.preprocess(emptyToNull, z.string().trim().min(5).max(160).nullable().optional()),
+  requirementKey: z.string().trim().min(1).max(80),
+  fileName: z.string().trim().min(1).max(180).optional(),
+  mimeType: z.string().trim().min(3).max(80).optional(),
+  sizeBytes: z.number().int().min(1).optional(),
+  dataUrl: z.string().trim().min(5).optional(),
+  quickSample: z.boolean().optional(),
+});
+export type PublicDocumentUploadInput = z.infer<typeof publicDocumentUploadSchema>;
+
+export const staffDocumentReviewSchema = z.object({
+  requirementKey: z.string().trim().min(1).max(80),
+  reviewStatus: z.enum(['PRE_VERIFIED', 'NEEDS_RESUBMISSION']),
+  reviewerNote: z.preprocess(
+    emptyToNull,
+    z.string().trim().max(500, 'Note must be at most 500 characters').nullable().optional()
+  ),
+});
+export type StaffDocumentReviewInput = z.infer<typeof staffDocumentReviewSchema>;
+
 // ---------------------------------------------------------------------------
 // Users (admin)
 // ---------------------------------------------------------------------------

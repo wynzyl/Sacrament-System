@@ -119,7 +119,7 @@ function phoneKey(value: string | null | undefined): string {
   return (value ?? '').replace(/\D/g, '').slice(-10);
 }
 
-function contactMatches(contact: string, appt: { participantPhone: string | null; participantEmail: string | null }): boolean {
+export function contactMatches(contact: string, appt: { participantPhone: string | null; participantEmail: string | null }): boolean {
   const input = contact.trim();
   if (input.includes('@')) {
     return !!appt.participantEmail && appt.participantEmail.trim().toLowerCase() === input.toLowerCase();
@@ -141,7 +141,7 @@ export async function trackBooking(reference: string, contact: string) {
     where: { referenceNumber: normalizeReference(reference), deletedAt: null },
     include: {
       payments: { where: { deletedAt: null }, select: { amount: true } },
-      requirements: { select: { label: true, isMet: true }, orderBy: { label: 'asc' } },
+      requirements: { select: { key: true, label: true, isMet: true }, orderBy: { label: 'asc' } },
     },
   });
   if (!appt || !contactMatches(contact, appt)) throw new ApiError(404, NOT_FOUND);
