@@ -38,3 +38,13 @@ export enum PaymentMethod {
   CASH = 'CASH',
   GCASH = 'GCASH',
 }
+
+export enum AppointmentSource {
+  STAFF = 'STAFF',
+  ONLINE = 'ONLINE',
+}
+
+export enum PaymentKind {
+  PAYMENT = 'PAYMENT',
+  REVERSAL = 'REVERSAL',
+}

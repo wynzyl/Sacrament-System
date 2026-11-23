@@ -1,102 +1,49 @@
 // app/api/reports/collections/route.ts
-// API for fetching collections/payments report data
+// Collections report for a date range (Manila business days), net of reversals.
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { validateApiSession } from '@/lib/auth';
+import { ApiError, errorResponse, json, requireUser } from '@/lib/http';
+import { dateOnly } from '@/lib/validation';
+import { manilaDayRange } from '@/lib/dates';
+import { summarizePayments } from '@/lib/payments/ledger';
 
 export async function GET(request: NextRequest) {
   try {
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const user = await requireUser(['ADMIN', 'CASHIER']);
 
-    // Only Admin and Cashier can access collections report
-    if (user.role !== 'ADMIN' && user.role !== 'CASHIER') {
-      return NextResponse.json(
-        { error: 'Access denied' },
-        { status: 403 }
-      );
-    }
+    const params = request.nextUrl.searchParams;
+    const fromParam = params.get('from');
+    const toParam = params.get('to');
+    const cashierId = params.get('cashierId');
+    if (!fromParam || !toParam) throw new ApiError(400, 'From and To dates are required');
 
-    const searchParams = request.nextUrl.searchParams;
-    const fromDate = searchParams.get('from');
-    const toDate = searchParams.get('to');
-    const cashierId = searchParams.get('cashierId');
+    const from = dateOnly.parse(fromParam);
+    const to = dateOnly.parse(toParam);
 
-    if (!fromDate || !toDate) {
-      return NextResponse.json(
-        { error: 'From and To dates are required' },
-        { status: 400 }
-      );
-    }
-
-    const from = new Date(fromDate);
-    from.setHours(0, 0, 0, 0);
-
-    const to = new Date(toDate);
-    to.setHours(23, 59, 59, 999);
-
-    const where: any = {
-      createdAt: {
-        gte: from,
-        lte: to,
-      },
+    const where: Prisma.PaymentWhereInput = {
+      createdAt: { gte: manilaDayRange(from).start, lt: manilaDayRange(to).end },
       deletedAt: null,
     };
 
-    // Cashiers can only see their own processed payments
-    if (user.role === 'CASHIER') {
-      where.processedById = user.id;
-    } else if (user.role === 'ADMIN' && cashierId) {
-      // Admin can filter by specific cashier
-      where.processedById = cashierId;
-    }
+    // Cashiers only see their own entries; admins may filter by cashier.
+    if (user.role === 'CASHIER') where.processedById = user.id;
+    else if (cashierId) where.processedById = cashierId;
 
     const payments = await prisma.payment.findMany({
       where,
       include: {
-        appointment: {
-          select: {
-            participantName: true,
-            sacramentType: true,
-            scheduledDate: true,
-          },
-        },
-        processedBy: {
-          select: {
-            name: true,
-          },
-        },
+        appointment: { select: { participantName: true, sacramentType: true, scheduledDate: true, referenceNumber: true } },
+        processedBy: { select: { name: true } },
+        reversal: { select: { id: true, receiptNumber: true } },
+        reversesPayment: { select: { id: true, receiptNumber: true } },
       },
-      orderBy: [
-        { createdAt: 'asc' },
-      ],
+      orderBy: [{ createdAt: 'asc' }],
     });
 
-    // Calculate totals
-    const totals = payments.reduce(
-      (acc, payment) => {
-        if (payment.paymentMethod === 'CASH') {
-          acc.cash += payment.amount;
-        } else if (payment.paymentMethod === 'GCASH') {
-          acc.gcash += payment.amount;
-        }
-        acc.total += payment.amount;
-        return acc;
-      },
-      { cash: 0, gcash: 0, total: 0 }
-    );
-
-    return NextResponse.json({ payments, totals });
+    return json({ payments, totals: summarizePayments(payments) });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch collections report' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'GET /api/reports/collections');
   }
 }

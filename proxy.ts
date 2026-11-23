@@ -12,6 +12,8 @@ const protectedApiPaths = [
   '/api/users',
   '/api/appointments',
   '/api/payments',
+  '/api/reports',
+  '/api/audit-logs',
   '/api/auth/logout',
   '/api/auth/session',
 ];

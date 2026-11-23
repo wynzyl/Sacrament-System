@@ -33,18 +33,6 @@ export async function comparePassword(
 }
 
 /**
- * Generate a receipt number
- * Format: RCP-YYYY-XXXXX
- */
-export function generateReceiptNumber(): string {
-  const year = new Date().getFullYear();
-  const random = Math.floor(Math.random() * 99999)
-    .toString()
-    .padStart(5, '0');
-  return `RCP-${year}-${random}`;
-}
-
-/**
  * Format currency for display
  */
 export function formatCurrency(amount: number): string {

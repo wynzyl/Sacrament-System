@@ -1,130 +1,76 @@
 // app/api/users/route.ts
 // API for managing users (GET all, POST new)
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { hashPassword, validateApiSession } from '@/lib/auth';
+import { hashPassword } from '@/lib/auth';
+import { ApiError, errorResponse, json, parseBody, requireUser } from '@/lib/http';
+import { userCreateSchema } from '@/lib/validation';
+import { userActor, userSnapshot, writeAudit } from '@/lib/audit';
+
+const USER_SELECT = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  status: true,
+  availability: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 // GET all users with optional role filter
 export async function GET(request: NextRequest) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    await requireUser();
 
-    const searchParams = request.nextUrl.searchParams;
-    const role = searchParams.get('role');
+    const role = request.nextUrl.searchParams.get('role');
+    const where: Prisma.UserWhereInput = { deletedAt: null };
+    if (role === 'ADMIN' || role === 'PRIEST' || role === 'CASHIER') where.role = role;
 
-    const where: any = {
-      deletedAt: null, // Always filter out soft-deleted users
-    };
-    if (role) {
-      where.role = role;
-    }
-
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        status: true,
-        availability: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: {
-        name: 'asc',
-      },
-    });
-
-    return NextResponse.json(users);
+    const users = await prisma.user.findMany({ where, select: USER_SELECT, orderBy: { name: 'asc' } });
+    return json(users);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch users' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'GET /api/users');
   }
 }
 
-// POST - Create new user (Admin only)
+// POST - Create user (admin only)
 export async function POST(request: NextRequest) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const actor = await requireUser(['ADMIN'], 'Only administrators can create users');
+    const input = await parseBody(request, userCreateSchema);
 
-    // Only ADMIN can create users
-    if (user.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only administrators can create users' },
-        { status: 403 }
-      );
-    }
+    const existing = await prisma.user.findFirst({ where: { email: input.email, deletedAt: null } });
+    if (existing) throw new ApiError(400, 'Email already exists');
 
-    const { email: rawEmail, password, name, role, status, availability } = await request.json();
-    const email = typeof rawEmail === 'string' ? rawEmail.trim().toLowerCase() : '';
+    const password = await hashPassword(input.password);
 
-    // Validate required fields
-    if (!email || !password || !name || !role) {
-      return NextResponse.json(
-        { error: 'All fields are required' },
-        { status: 400 }
-      );
-    }
-
-    // Check if email already exists (only among non-deleted users)
-    const existingUser = await prisma.user.findFirst({
-      where: { email, deletedAt: null },
+    const created = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: input.email,
+          password,
+          name: input.name,
+          role: input.role,
+          status: input.status ?? 'ACTIVE',
+          availability: input.availability ?? 'AVAILABLE',
+        },
+        select: USER_SELECT,
+      });
+      await writeAudit(tx, {
+        actor: userActor(actor),
+        action: 'user.create',
+        entityType: 'User',
+        entityId: user.id,
+        after: userSnapshot(user),
+      });
+      return user;
     });
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already exists' },
-        { status: 400 }
-      );
-    }
-
-    // Hash password
-    const hashedPassword = await hashPassword(password);
-
-    // Create user
-    const newUser = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        role,
-        status: status || 'ACTIVE',
-        availability: availability || 'AVAILABLE',
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        status: true,
-        availability: true,
-        createdAt: true,
-      },
-    });
-
-    return NextResponse.json(newUser, { status: 201 });
+    return json(created, 201);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to create user' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'POST /api/users');
   }
 }

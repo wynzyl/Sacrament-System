@@ -9,6 +9,12 @@ interface CashierReportsProps {
   user: User | null;
 }
 
+/** Exact centavo summation net of negative reversals (Constitution II). */
+function netSumPayments(items: ReportPayment[]): number {
+  const centavos = items.reduce((sum, p) => sum + Math.round(p.amount * 100), 0);
+  return Math.round(centavos) / 100;
+}
+
 export function CashierReports({ user }: CashierReportsProps) {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -16,14 +22,16 @@ export function CashierReports({ user }: CashierReportsProps) {
   const [loading, setLoading] = useState(false);
 
   const fetchReport = async () => {
-    if (!fromDate || !toDate) { alert('Please select both From and To dates'); return; }
+    if (!fromDate || !toDate) {
+      alert('Please select both From and To dates');
+      return;
+    }
     setLoading(true);
     try {
       const params = new URLSearchParams({ from: fromDate, to: toDate });
       const response = await fetch(`/api/reports/collections?${params}`);
       if (response.ok) {
         const data = await response.json();
-        // API returns { payments, totals } — extract the payments array
         setCollectionsData(Array.isArray(data) ? data : data.payments ?? []);
       }
     } catch (error) {
@@ -59,7 +67,6 @@ export function CashierReports({ user }: CashierReportsProps) {
     });
 
     let yPos = 50;
-    let grandTotal = 0;
 
     Object.entries(groupedByDate).forEach(([date, datePayments]) => {
       doc.setFontSize(12);
@@ -72,13 +79,12 @@ export function CashierReports({ user }: CashierReportsProps) {
         payment.appointment.sacramentType,
         payment.paymentMethod,
         payment.receiptNumber,
-        Math.abs(payment.amount).toFixed(2),
+        payment.amount.toFixed(2),
       ]);
 
-      const dateTotal = datePayments.reduce((sum, p) => sum + Math.abs(p.amount), 0);
-      grandTotal += dateTotal;
+      const dateTotal = netSumPayments(datePayments);
 
-      (doc as any).autoTable({
+      (doc as unknown as { autoTable: (opts: unknown) => void }).autoTable({
         startY: yPos,
         head: [['Participant', 'Sacrament', 'Method', 'Receipt #', 'Amount']],
         body: tableData,
@@ -89,17 +95,21 @@ export function CashierReports({ user }: CashierReportsProps) {
         margin: { left: 14 },
       });
 
-      yPos = (doc as any).lastAutoTable.finalY + 5;
+      yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 5;
       doc.setFont('helvetica', 'bold');
-      doc.text(`Subtotal: PHP ${dateTotal.toFixed(2)}`, 150, yPos, { align: 'right' });
+      doc.text(`Net Subtotal: PHP ${dateTotal.toFixed(2)}`, 150, yPos, { align: 'right' });
       yPos += 10;
 
-      if (yPos > 260) { doc.addPage(); yPos = 20; }
+      if (yPos > 260) {
+        doc.addPage();
+        yPos = 20;
+      }
     });
 
+    const grandTotal = netSumPayments(collectionsData);
     doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
-    doc.text(`Grand Total: PHP ${grandTotal.toFixed(2)}`, 150, yPos + 5, { align: 'right' });
+    doc.text(`Net Grand Total: PHP ${grandTotal.toFixed(2)}`, 150, yPos + 5, { align: 'right' });
     doc.save(`daily-collection-report-${fromDate}-to-${toDate}.pdf`);
   };
 
@@ -117,30 +127,49 @@ export function CashierReports({ user }: CashierReportsProps) {
     groupedByDate[date].push(payment);
   });
 
-  let grandTotal = 0;
-  Object.values(groupedByDate).forEach((payments) => {
-    grandTotal += payments.reduce((sum, p) => sum + Math.abs(p.amount), 0);
-  });
+  const grandTotal = netSumPayments(collectionsData);
 
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-lg shadow">
-        <h2 className="text-xl font-bold mb-4">Daily Collection Report</h2>
-        <DatePresetButtons onSetDates={(f, t) => { setFromDate(f); setToDate(t); }} />
+        <h2 className="text-xl font-bold mb-4">Daily Collection Report (Net of Reversals)</h2>
+        <DatePresetButtons
+          onSetDates={(f, t) => {
+            setFromDate(f);
+            setToDate(t);
+          }}
+        />
         <div className="flex flex-wrap gap-4 items-end">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">From Date</label>
-            <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="px-3 py-2 border rounded-lg" />
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="px-3 py-2 border rounded-lg"
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">To Date</label>
-            <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="px-3 py-2 border rounded-lg" />
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              className="px-3 py-2 border rounded-lg"
+            />
           </div>
-          <button onClick={fetchReport} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400">
+          <button
+            onClick={fetchReport}
+            disabled={loading}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+          >
             {loading ? 'Loading...' : 'Generate Report'}
           </button>
           {collectionsData.length > 0 && (
-            <button onClick={exportToPDF} className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
+            <button
+              onClick={exportToPDF}
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+            >
               Export to PDF
             </button>
           )}
@@ -151,36 +180,65 @@ export function CashierReports({ user }: CashierReportsProps) {
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-bold mb-4">Collection Results</h3>
           {Object.entries(groupedByDate).map(([date, datePayments]) => {
-            const dateTotal = datePayments.reduce((sum, p) => sum + Math.abs(p.amount), 0);
+            const dateTotal = netSumPayments(datePayments);
             return (
               <div key={date} className="mb-6">
-                <h4 className="font-semibold text-gray-800 mb-2 bg-gray-100 p-2 rounded">{formatDate(date)}</h4>
+                <h4 className="font-semibold text-gray-800 mb-2 bg-gray-100 p-2 rounded">
+                  {formatDate(date)}
+                </h4>
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Participant</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sacrament</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Method</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Receipt #</th>
-                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Participant
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Sacrament
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Method
+                        </th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          Receipt #
+                        </th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                          Amount
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {datePayments.map((payment) => (
-                        <tr key={payment.id}>
-                          <td className="px-4 py-2 text-sm">{payment.appointment.participantName}</td>
-                          <td className="px-4 py-2 text-sm">{payment.appointment.sacramentType}</td>
-                          <td className="px-4 py-2 text-sm">{payment.paymentMethod}</td>
-                          <td className="px-4 py-2 text-sm">{payment.receiptNumber}</td>
-                          <td className="px-4 py-2 text-sm text-right font-medium">{formatCurrency(Math.abs(payment.amount))}</td>
-                        </tr>
-                      ))}
+                      {datePayments.map((payment) => {
+                        const isReversal = payment.kind === 'REVERSAL' || payment.amount < 0;
+                        return (
+                          <tr key={payment.id}>
+                            <td className="px-4 py-2 text-sm">
+                              {payment.appointment.participantName}
+                            </td>
+                            <td className="px-4 py-2 text-sm">
+                              {payment.appointment.sacramentType}
+                            </td>
+                            <td className="px-4 py-2 text-sm">{payment.paymentMethod}</td>
+                            <td className="px-4 py-2 text-sm font-mono">{payment.receiptNumber}</td>
+                            <td
+                              className={`px-4 py-2 text-sm text-right font-medium ${
+                                isReversal ? 'text-red-600' : 'text-gray-900'
+                              }`}
+                            >
+                              {formatCurrency(payment.amount)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot>
                       <tr className="bg-gray-50">
-                        <td colSpan={4} className="px-4 py-2 text-sm font-semibold text-right">Subtotal:</td>
-                        <td className="px-4 py-2 text-sm font-semibold text-right">{formatCurrency(dateTotal)}</td>
+                        <td colSpan={4} className="px-4 py-2 text-sm font-semibold text-right">
+                          Net Subtotal:
+                        </td>
+                        <td className="px-4 py-2 text-sm font-semibold text-right">
+                          {formatCurrency(dateTotal)}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
@@ -190,7 +248,9 @@ export function CashierReports({ user }: CashierReportsProps) {
           })}
           <div className="border-t-2 border-gray-300 pt-4 mt-4">
             <div className="flex justify-end">
-              <span className="text-lg font-bold">Grand Total: {formatCurrency(grandTotal)}</span>
+              <span className="text-lg font-bold">
+                Net Grand Total: {formatCurrency(grandTotal)}
+              </span>
             </div>
           </div>
         </div>

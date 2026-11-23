@@ -22,23 +22,39 @@ export function usePayments() {
     }
   }, []);
 
-  const processPayment = useCallback(async (paymentData: {
-    appointmentId: string;
-    amount: number;
-    paymentMethod: string;
-    gcashRefNumber?: string | null;
-  }) => {
-    const response = await fetch('/api/payments', {
+  const processPayment = useCallback(
+    async (paymentData: {
+      appointmentId: string;
+      amount: number;
+      paymentMethod: string;
+      gcashRefNumber?: string | null;
+    }) => {
+      const response = await fetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentData),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Payment failed');
+      }
+      return data;
+    },
+    []
+  );
+
+  const reversePayment = useCallback(async (paymentId: string, reason: string) => {
+    const response = await fetch(`/api/payments/${paymentId}/reverse`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(paymentData),
+      body: JSON.stringify({ reason }),
     });
+    const data = await response.json();
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Payment failed');
+      throw new Error(data.error || 'Failed to reverse payment');
     }
-    return response.json();
+    return data;
   }, []);
 
-  return { payments, summary, loading, fetchTodayPayments, processPayment };
+  return { payments, summary, loading, fetchTodayPayments, processPayment, reversePayment };
 }

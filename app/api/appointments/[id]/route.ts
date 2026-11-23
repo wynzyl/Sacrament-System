@@ -1,224 +1,72 @@
 // app/api/appointments/[id]/route.ts
-// API for single appointment (GET, PUT, DELETE)
+// API for a single appointment: GET, PUT (update), DELETE (cancel with reason).
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { validateApiSession } from '@/lib/auth';
+import { ApiError, errorResponse, json, parseBody, requireUser } from '@/lib/http';
+import { appointmentUpdateSchema, cancelSchema } from '@/lib/validation';
+import { cancelAppointment, updateAppointment } from '@/lib/appointments/service';
 
 interface RouteParams {
-  params: Promise<{
-    id: string;
-  }>;
+  params: Promise<{ id: string }>;
 }
 
 // GET single appointment
-export async function GET(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
+    const user = await requireUser();
     const { id } = await params;
 
     const appointment = await prisma.appointment.findFirst({
       where: { id, deletedAt: null },
       include: {
-        payments: {
-          where: { deletedAt: null },
-        },
-        createdBy: {
-          select: {
-            name: true,
-            email: true,
-          },
-        },
+        payments: { where: { deletedAt: null }, orderBy: { createdAt: 'asc' } },
+        createdBy: { select: { name: true, email: true } },
+        assignedPriest: { select: { id: true, name: true } },
+        requirements: { orderBy: { label: 'asc' } },
       },
     });
-
-    if (!appointment) {
-      return NextResponse.json(
-        { error: 'Appointment not found' },
-        { status: 404 }
-      );
-    }
+    if (!appointment) throw new ApiError(404, 'Appointment not found');
 
     // Role-based access control
-    if (user.role !== 'ADMIN') {
-      // Priests can only access their assigned appointments
-      if (user.role === 'PRIEST' && appointment.assignedPriestId !== user.id) {
-        return NextResponse.json(
-          { error: 'Access denied' },
-          { status: 403 }
-        );
-      }
-      // Cashiers should not access individual appointments via this endpoint
-      if (user.role === 'CASHIER') {
-        return NextResponse.json(
-          { error: 'Access denied' },
-          { status: 403 }
-        );
-      }
+    if (user.role === 'CASHIER') throw new ApiError(403, 'Access denied');
+    if (user.role === 'PRIEST' && appointment.assignedPriestId !== user.id) {
+      throw new ApiError(403, 'Access denied');
     }
 
-    return NextResponse.json(appointment);
+    return json(appointment);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch appointment' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'GET /api/appointments/[id]');
   }
 }
 
-// PUT - Update appointment
-export async function PUT(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+// PUT - Update appointment (admin: any field; priest: status of own appointment only)
+export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
+    const user = await requireUser();
     const { id } = await params;
-    const data = await request.json();
-
-    // Check if appointment exists and is not soft-deleted
-    const existingAppointment = await prisma.appointment.findFirst({
-      where: { id, deletedAt: null },
-    });
-
-    if (!existingAppointment) {
-      return NextResponse.json(
-        { error: 'Appointment not found' },
-        { status: 404 }
-      );
-    }
-
-    // Role-based access control for updates
-    if (user.role !== 'ADMIN') {
-      // Priests can only update their assigned appointments (limited to status changes only)
-      if (user.role === 'PRIEST') {
-        if (existingAppointment.assignedPriestId !== user.id) {
-          return NextResponse.json(
-            { error: 'Access denied' },
-            { status: 403 }
-          );
-        }
-
-        // Validate that priest is only updating the status field
-        const allowedFields = ['status'];
-        const providedFields = Object.keys(data).filter(key => data[key] !== undefined);
-        const disallowedFields = providedFields.filter(field => !allowedFields.includes(field));
-
-        if (disallowedFields.length > 0) {
-          return NextResponse.json(
-            { error: 'Access denied' },
-            { status: 403 }
-          );
-        }
-      } else if (user.role === 'CASHIER') {
-        // Cashiers cannot update appointments
-        return NextResponse.json(
-          { error: 'Only administrators can update appointments' },
-          { status: 403 }
-        );
-      }
-    }
-
-    // Build update data object with only provided fields
-    const updateData: any = {};
-
-    if (data.sacramentType !== undefined) updateData.sacramentType = data.sacramentType;
-    if (data.participantName !== undefined) updateData.participantName = data.participantName;
-    if (data.participantPhone !== undefined) updateData.participantPhone = data.participantPhone;
-    if (data.participantEmail !== undefined) updateData.participantEmail = data.participantEmail;
-    if (data.barangay !== undefined) updateData.barangay = data.barangay;
-    if (data.city !== undefined) updateData.city = data.city;
-    if (data.province !== undefined) updateData.province = data.province;
-    if (data.scheduledDate !== undefined) updateData.scheduledDate = new Date(data.scheduledDate);
-    if (data.scheduledTime !== undefined) updateData.scheduledTime = data.scheduledTime;
-    if (data.location !== undefined) updateData.location = data.location;
-    if (data.notes !== undefined) updateData.notes = data.notes;
-    if (data.status !== undefined) updateData.status = data.status;
-    if (data.fee !== undefined) updateData.fee = data.fee;
-    if (data.assignedPriestId !== undefined) updateData.assignedPriestId = data.assignedPriestId || null;
-
-    const appointment = await prisma.appointment.update({
-      where: { id },
-      data: updateData,
-    });
-
-    return NextResponse.json(appointment);
-  } catch (error: any) {
-    console.error('Update appointment error:', error?.message || error);
-    return NextResponse.json(
-      { error: 'Failed to update appointment', details: error?.message },
-      { status: 500 }
-    );
+    const input = await parseBody(request, appointmentUpdateSchema);
+    const appointment = await updateAppointment(user, id, input);
+    return json(appointment);
+  } catch (error) {
+    return errorResponse(error, 'PUT /api/appointments/[id]');
   }
 }
 
-// DELETE appointment (Admin only) - Changes status to CANCELLED instead of hard delete
-export async function DELETE(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+// DELETE - Cancel an appointment (admin only). Requires a reason; if money was
+// received, also requires { paymentDisposition: 'REFUND' | 'FORFEIT' }.
+export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Only ADMIN can cancel appointments
-    if (user.role !== 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Only administrators can cancel appointments' },
-        { status: 403 }
-      );
-    }
-
+    const user = await requireUser(['ADMIN'], 'Only administrators can cancel appointments');
     const { id } = await params;
-
-    // Check if appointment exists and is not already soft-deleted
-    const existingAppointment = await prisma.appointment.findFirst({
-      where: { id, deletedAt: null },
+    const input = await parseBody(request, cancelSchema);
+    const { appointment, refundedCentavos } = await cancelAppointment(user, id, input);
+    return json({
+      message: 'Appointment cancelled successfully',
+      status: appointment.status,
+      refunded: refundedCentavos / 100,
     });
-
-    if (!existingAppointment) {
-      return NextResponse.json(
-        { error: 'Appointment not found' },
-        { status: 404 }
-      );
-    }
-
-    // Change status to CANCELLED instead of deleting
-    await prisma.appointment.update({
-      where: { id },
-      data: { status: 'CANCELLED' },
-    });
-
-    return NextResponse.json({ message: 'Appointment cancelled successfully' });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to cancel appointment' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'DELETE /api/appointments/[id]');
   }
 }

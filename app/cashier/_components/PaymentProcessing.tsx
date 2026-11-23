@@ -11,38 +11,48 @@ export function PaymentProcessing() {
 
   const [selectedAppointment, setSelectedAppointment] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'GCASH'>('CASH');
-  const [fee, setFee] = useState(0);
+  const [balanceDue, setBalanceDue] = useState(0);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [gcashRef, setGcashRef] = useState('');
   const [processing, setProcessing] = useState(false);
 
+  const selectedApt = appointments.find((a) => a.id === selectedAppointment);
   const paymentValue = parseFloat(paymentAmount) || 0;
-  const change = paymentValue - fee;
-  const isValidPayment = paymentValue >= fee && fee > 0;
+  // Use centavo arithmetic to avoid float drift
+  const paymentCentavos = Math.round(paymentValue * 100);
+  const balanceCentavos = Math.round(balanceDue * 100);
+  const change = (paymentCentavos - balanceCentavos) / 100;
+  const isValidPayment = paymentCentavos >= balanceCentavos && balanceCentavos > 0;
 
   useEffect(() => {
-    fetchAppointments({ status: 'PENDING', unpaid: 'true' });
+    fetchAppointments({ status: 'PENDING,CONFIRMED', unpaid: 'true' });
     fetchTodayPayments();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidPayment) { alert('Payment amount must be equal to or greater than the fee.'); return; }
+    if (!isValidPayment) {
+      alert('Payment amount must be equal to or greater than the balance due.');
+      return;
+    }
 
     setProcessing(true);
     try {
-      await processPayment({
+      const created = await processPayment({
         appointmentId: selectedAppointment,
-        amount: fee,
+        amount: balanceDue,
         paymentMethod,
         gcashRefNumber: paymentMethod === 'GCASH' ? gcashRef : null,
       });
 
       const changeMessage = change > 0 ? `\nChange: ${formatCurrency(change)}` : '';
-      alert(`Payment processed successfully!${changeMessage}`);
+      alert(`Payment processed! Receipt: ${created.receiptNumber}${changeMessage}`);
 
-      setSelectedAppointment(''); setFee(0); setPaymentAmount(''); setGcashRef('');
-      fetchAppointments({ status: 'PENDING', unpaid: 'true' });
+      setSelectedAppointment('');
+      setBalanceDue(0);
+      setPaymentAmount('');
+      setGcashRef('');
+      fetchAppointments({ status: 'PENDING,CONFIRMED', unpaid: 'true' });
       fetchTodayPayments();
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Payment failed');
@@ -56,15 +66,15 @@ export function PaymentProcessing() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500">Cash Total (Today)</h3>
+          <h3 className="text-sm font-medium text-gray-500">Cash Total (Today, Net)</h3>
           <p className="text-3xl font-bold text-green-600">{formatCurrency(summary.cash)}</p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500">GCash Total (Today)</h3>
+          <h3 className="text-sm font-medium text-gray-500">GCash Total (Today, Net)</h3>
           <p className="text-3xl font-bold text-blue-600">{formatCurrency(summary.gcash)}</p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500">Overall Total (Today)</h3>
+          <h3 className="text-sm font-medium text-gray-500">Overall Total (Today, Net)</h3>
           <p className="text-3xl font-bold text-purple-600">{formatCurrency(summary.total)}</p>
         </div>
       </div>
@@ -75,13 +85,13 @@ export function PaymentProcessing() {
           <h2 className="text-xl font-bold mb-4">Process Payment</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Select Appointment</label>
+              <label className="block text-sm font-medium mb-1">Select Unpaid Appointment</label>
               <select
                 value={selectedAppointment}
                 onChange={(e) => {
                   setSelectedAppointment(e.target.value);
-                  const apt = appointments.find(a => a.id === e.target.value);
-                  setFee(apt ? apt.fee : 0);
+                  const apt = appointments.find((a) => a.id === e.target.value);
+                  setBalanceDue(apt ? apt.balanceDue ?? apt.fee : 0);
                   setPaymentAmount('');
                 }}
                 required
@@ -90,41 +100,88 @@ export function PaymentProcessing() {
                 <option value="">Choose an appointment...</option>
                 {appointments.map((apt) => (
                   <option key={apt.id} value={apt.id}>
-                    {apt.participantName} - {apt.sacramentType} ({formatCurrency(apt.fee)})
+                    {apt.referenceNumber ? `[${apt.referenceNumber}] ` : ''}
+                    {apt.participantName} - {apt.sacramentType} (Balance:{' '}
+                    {formatCurrency(apt.balanceDue ?? apt.fee)})
                   </option>
                 ))}
               </select>
             </div>
 
+            {selectedApt && (
+              <div className="bg-gray-50 p-3 rounded-lg text-xs text-gray-700 space-y-1">
+                <div className="flex justify-between">
+                  <span>Fee:</span>
+                  <span className="font-semibold">{formatCurrency(selectedApt.fee)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Amount Already Paid:</span>
+                  <span className="font-semibold text-green-700">
+                    {formatCurrency(selectedApt.amountPaid ?? 0)}
+                  </span>
+                </div>
+                <div className="flex justify-between border-t pt-1 text-sm font-bold text-gray-900">
+                  <span>Balance Due:</span>
+                  <span>{formatCurrency(balanceDue)}</span>
+                </div>
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-medium mb-1">Payment Method</label>
               <div className="flex gap-4">
                 <label className="flex items-center">
-                  <input type="radio" value="CASH" checked={paymentMethod === 'CASH'} onChange={(e) => setPaymentMethod(e.target.value as 'CASH')} className="mr-2" />
+                  <input
+                    type="radio"
+                    value="CASH"
+                    checked={paymentMethod === 'CASH'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'CASH')}
+                    className="mr-2"
+                  />
                   Cash
                 </label>
                 <label className="flex items-center">
-                  <input type="radio" value="GCASH" checked={paymentMethod === 'GCASH'} onChange={(e) => setPaymentMethod(e.target.value as 'GCASH')} className="mr-2" />
+                  <input
+                    type="radio"
+                    value="GCASH"
+                    checked={paymentMethod === 'GCASH'}
+                    onChange={(e) => setPaymentMethod(e.target.value as 'GCASH')}
+                    className="mr-2"
+                  />
                   GCash
                 </label>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Fee Amount</label>
-              <input type="text" value={fee > 0 ? formatCurrency(fee) : ''} readOnly className="w-full px-3 py-2 border rounded-lg bg-gray-100 font-semibold text-gray-700" placeholder="Select an appointment" />
+              <label className="block text-sm font-medium mb-1">Balance Due</label>
+              <input
+                type="text"
+                value={balanceDue > 0 ? formatCurrency(balanceDue) : ''}
+                readOnly
+                className="w-full px-3 py-2 border rounded-lg bg-gray-100 font-semibold text-gray-700"
+                placeholder="Select an appointment"
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">Payment Amount</label>
+              <label className="block text-sm font-medium mb-1">Amount Tendered</label>
               <input
-                type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)}
-                required step="0.01" min={fee}
-                className={`w-full px-3 py-2 border rounded-lg ${paymentAmount && !isValidPayment ? 'border-red-500 bg-red-50' : ''}`}
-                placeholder="Enter payment amount"
+                type="number"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                required
+                step="0.01"
+                min={balanceDue}
+                className={`w-full px-3 py-2 border rounded-lg ${
+                  paymentAmount && !isValidPayment ? 'border-red-500 bg-red-50' : ''
+                }`}
+                placeholder="Enter amount received"
               />
               {paymentAmount && !isValidPayment && (
-                <p className="text-red-500 text-sm mt-1">Payment must be at least {formatCurrency(fee)}</p>
+                <p className="text-red-500 text-sm mt-1">
+                  Amount must be at least {formatCurrency(balanceDue)}
+                </p>
               )}
             </div>
 
@@ -132,7 +189,9 @@ export function PaymentProcessing() {
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex justify-between items-center">
                   <span className="text-sm font-medium text-green-800">Change:</span>
-                  <span className="text-2xl font-bold text-green-600">{formatCurrency(change)}</span>
+                  <span className="text-2xl font-bold text-green-600">
+                    {formatCurrency(change)}
+                  </span>
                 </div>
               </div>
             )}
@@ -140,11 +199,22 @@ export function PaymentProcessing() {
             {paymentMethod === 'GCASH' && (
               <div>
                 <label className="block text-sm font-medium mb-1">GCash Reference Number</label>
-                <input type="text" value={gcashRef} onChange={(e) => setGcashRef(e.target.value)} required className="w-full px-3 py-2 border rounded-lg" placeholder="Enter reference number" />
+                <input
+                  type="text"
+                  value={gcashRef}
+                  onChange={(e) => setGcashRef(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border rounded-lg"
+                  placeholder="Enter reference number"
+                />
               </div>
             )}
 
-            <button type="submit" disabled={processing || !isValidPayment} className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed">
+            <button
+              type="submit"
+              disabled={processing || !isValidPayment}
+              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+            >
               {processing ? 'Processing...' : 'Process Payment'}
             </button>
           </form>
@@ -152,27 +222,53 @@ export function PaymentProcessing() {
 
         {/* Today's Payments */}
         <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="text-xl font-bold mb-4">Today&apos;s Payments</h2>
+          <h2 className="text-xl font-bold mb-4">Today&apos;s Ledger Entries</h2>
           <div className="space-y-3 max-h-96 overflow-y-auto">
             {payments.length === 0 ? (
               <p className="text-gray-500 text-center py-4">No payments today</p>
             ) : (
-              payments.map((payment) => (
-                <div key={payment.id} className="border-l-4 border-blue-500 bg-gray-50 p-3 rounded">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-semibold">{payment.appointment.participantName}</p>
-                      <p className="text-sm text-gray-600">{payment.appointment.sacramentType}</p>
-                      <p className="text-xs text-gray-500">{formatDateTime(payment.createdAt)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-green-600">{formatCurrency(payment.amount)}</p>
-                      <p className="text-xs text-gray-600">{payment.paymentMethod}</p>
-                      <p className="text-xs text-gray-500">{payment.receiptNumber}</p>
+              payments.map((payment) => {
+                const isReversal = payment.kind === 'REVERSAL' || payment.amount < 0;
+                return (
+                  <div
+                    key={payment.id}
+                    className={`border-l-4 p-3 rounded ${
+                      isReversal ? 'border-red-500 bg-red-50/60' : 'border-blue-500 bg-gray-50'
+                    }`}
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold">{payment.appointment.participantName}</p>
+                          {isReversal && (
+                            <span className="text-xs bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-semibold">
+                              REVERSAL
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600">
+                          {payment.appointment.sacramentType}
+                          {payment.appointment.referenceNumber
+                            ? ` • ${payment.appointment.referenceNumber}`
+                            : ''}
+                        </p>
+                        <p className="text-xs text-gray-500">{formatDateTime(payment.createdAt)}</p>
+                      </div>
+                      <div className="text-right">
+                        <p
+                          className={`font-bold ${
+                            isReversal ? 'text-red-600' : 'text-green-600'
+                          }`}
+                        >
+                          {formatCurrency(payment.amount)}
+                        </p>
+                        <p className="text-xs text-gray-600">{payment.paymentMethod}</p>
+                        <p className="text-xs font-mono text-gray-500">{payment.receiptNumber}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

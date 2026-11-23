@@ -8,6 +8,8 @@ import {
   SacramentType,
   AppointmentStatus,
   PaymentMethod,
+  AppointmentSource,
+  PaymentKind,
 } from './enums';
 
 // ============================================
@@ -34,11 +36,23 @@ export interface UserFormData {
 }
 
 // ============================================
-// Appointment Types
+// Appointment & Requirement Types
 // ============================================
+
+export interface AppointmentRequirementItem {
+  id: string;
+  appointmentId: string;
+  key: string;
+  label: string;
+  isMet: boolean;
+  verifiedById?: string | null;
+  verifiedAt?: string | null;
+}
 
 export interface Appointment {
   id: string;
+  referenceNumber?: string;
+  source?: AppointmentSource | string;
   sacramentType: SacramentType | string;
   participantName: string;
   participantPhone: string | null;
@@ -51,7 +65,13 @@ export interface Appointment {
   location: string | null;
   notes: string | null;
   status: AppointmentStatus | string;
+  cancelReason?: string | null;
+  cancelledAt?: string | null;
   fee: number;
+  amountPaid?: number;
+  balanceDue?: number;
+  requirementsMet?: number;
+  requirementsTotal?: number;
   assignedPriestId: string | null;
   assignedPriest?: {
     id: string;
@@ -60,7 +80,7 @@ export interface Appointment {
   createdBy?: {
     name: string;
     email: string;
-  };
+  } | null;
 }
 
 export interface AppointmentFormData {
@@ -86,14 +106,26 @@ export interface AppointmentFormData {
 
 export interface Payment {
   id: string;
+  kind?: PaymentKind | string;
   amount: number;
   paymentMethod: PaymentMethod | string;
   receiptNumber: string;
   gcashRefNumber?: string | null;
+  reason?: string | null;
+  reversesPaymentId?: string | null;
+  reversal?: {
+    id: string;
+    receiptNumber: string;
+  } | null;
+  reversesPayment?: {
+    id: string;
+    receiptNumber: string;
+  } | null;
   createdAt: string;
   appointment: {
     participantName: string;
     sacramentType: SacramentType | string;
+    referenceNumber?: string;
     scheduledDate?: string;
   };
   processedBy?: {
@@ -113,6 +145,7 @@ export interface PaymentSummary {
 
 export interface ReportAppointment {
   id: string;
+  referenceNumber?: string;
   sacramentType: SacramentType | string;
   participantName: string;
   scheduledDate: string;
@@ -127,14 +160,20 @@ export interface ReportAppointment {
 
 export interface ReportPayment {
   id: string;
+  kind?: PaymentKind | string;
   amount: number;
   paymentMethod: PaymentMethod | string;
   receiptNumber: string;
+  reason?: string | null;
   createdAt: string;
   appointment: {
     participantName: string;
     sacramentType: SacramentType | string;
+    referenceNumber?: string;
     scheduledDate: string;
+  };
+  processedBy?: {
+    name: string;
   };
 }
 
@@ -144,12 +183,39 @@ export interface CollectionsReportData {
 }
 
 // ============================================
+// Audit Log Types
+// ============================================
+
+export interface AuditLogEntry {
+  id: string;
+  actorType: 'USER' | 'SYSTEM' | 'PUBLIC' | string;
+  actorId: string | null;
+  actorName: string | null;
+  actorRole: string | null;
+  action: string;
+  entityType: 'Appointment' | 'Payment' | 'User' | 'AppointmentRequirement' | string;
+  entityId: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+// ============================================
 // Tab Types
 // ============================================
 
-export type AdminTabType = 'dashboard' | 'appointments' | 'users' | 'priests' | 'payments' | 'reports';
+export type AdminTabType =
+  | 'dashboard'
+  | 'appointments'
+  | 'calendar'
+  | 'users'
+  | 'priests'
+  | 'payments'
+  | 'reports'
+  | 'audit';
 export type CashierTabType = 'payments' | 'reports';
-export type PriestTabType = 'appointments' | 'reports';
+export type PriestTabType = 'appointments' | 'calendar' | 'reports';
 
 // ============================================
 // Filter & Sort Types

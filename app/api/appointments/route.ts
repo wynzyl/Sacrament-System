@@ -1,192 +1,98 @@
 // app/api/appointments/route.ts
-// API for managing appointments (GET, POST)
+// API for listing (GET) and creating (POST) appointments.
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { Prisma, type AppointmentStatus } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { validateApiSession } from '@/lib/auth';
+import { errorResponse, json, parseBody, requireUser } from '@/lib/http';
+import { appointmentCreateSchema, dateOnly } from '@/lib/validation';
+import { autoCompletePastAppointments, createAppointment } from '@/lib/appointments/service';
+import { dateOnlyToUtc, manilaDateString } from '@/lib/dates';
+import { balanceDueCentavos, fromCentavos, sumCentavos, toCentavos } from '@/lib/money';
 
-// GET all appointments with optional filters
+const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
+
+// GET appointments with optional filters:
+//   status=PENDING or status=PENDING,CONFIRMED   unpaid=true   activeOnly=true
+//   from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive, scheduled date)
 export async function GET(request: NextRequest) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+    const user = await requireUser();
+
+    const params = request.nextUrl.searchParams;
+    const statusParam = params.get('status');
+    const unpaid = params.get('unpaid') === 'true';
+    const activeOnly = params.get('activeOnly') === 'true';
+    const fromParam = params.get('from');
+    const toParam = params.get('to');
+
+    // Past appointments are completed (audited as a system action).
+    await autoCompletePastAppointments();
+
+    const where: Prisma.AppointmentWhereInput = { deletedAt: null };
+
+    // Role-based filtering: priests only ever see their own assignments.
+    if (user.role === 'PRIEST') where.assignedPriestId = user.id;
+
+    if (statusParam) {
+      const statuses = statusParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s): s is AppointmentStatus => VALID_STATUSES.includes(s));
+      if (statuses.length > 0) where.status = { in: statuses };
     }
 
-    const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const unpaid = searchParams.get('unpaid');
-    const activeOnly = searchParams.get('activeOnly'); // Filter for admin view
+    const dateFilter: Prisma.DateTimeFilter = {};
+    if (fromParam) dateFilter.gte = dateOnlyToUtc(dateOnly.parse(fromParam));
+    if (toParam) dateFilter.lte = dateOnlyToUtc(dateOnly.parse(toParam));
 
-    // Get current date at start of day for comparison
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Auto-update past appointments to COMPLETED
-    // Update appointments where scheduledDate < today AND status is not COMPLETED or CANCELLED
-    await prisma.appointment.updateMany({
-      where: {
-        scheduledDate: {
-          lt: today,
-        },
-        status: {
-          notIn: ['COMPLETED', 'CANCELLED'],
-        },
-        deletedAt: null,
-      },
-      data: {
-        status: 'COMPLETED',
-      },
-    });
-
-    const where: any = {
-      deletedAt: null, // Always filter out soft-deleted records
-    };
-
-    // Role-based filtering
-    if (user.role === 'PRIEST') {
-      // Priests can only see appointments assigned to them
-      where.assignedPriestId = user.id;
+    // Active = today (Manila) or later and not completed.
+    if (activeOnly) {
+      dateFilter.gte = dateOnlyToUtc(manilaDateString());
+      where.status = { not: 'COMPLETED' };
     }
-    // ADMIN and CASHIER see all appointments (CASHIER needs to see pending for payment processing)
+    if (Object.keys(dateFilter).length > 0) where.scheduledDate = dateFilter;
 
-    if (status) {
-      where.status = status;
-    }
-
-    // Filter for active appointments (today or future, not completed)
-    if (activeOnly === 'true') {
-      where.scheduledDate = {
-        gte: today,
-      };
-      where.status = {
-        not: 'COMPLETED',
-      };
-    }
-
-    // Filter appointments without payments
-    if (unpaid === 'true') {
-      const appointments = await prisma.appointment.findMany({
-        where,
-        include: {
-          payments: true,
-          assignedPriest: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-        orderBy: {
-          scheduledDate: 'asc',
-        },
-      });
-
-      // Filter out appointments that have payments
-      const unpaidAppointments = appointments.filter(
-        apt => apt.payments.length === 0
-      );
-
-      // Remove payments from response
-      const cleanAppointments = unpaidAppointments.map(
-        ({ payments, ...apt }) => apt
-      );
-
-      return NextResponse.json(cleanAppointments);
-    }
-
-    const appointments = await prisma.appointment.findMany({
+    const rows = await prisma.appointment.findMany({
       where,
       include: {
-        assignedPriest: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        assignedPriest: { select: { id: true, name: true } },
+        payments: { where: { deletedAt: null }, select: { amount: true } },
+        requirements: { select: { isMet: true } },
       },
-      orderBy: {
-        scheduledDate: 'asc',
-      },
+      orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }],
     });
 
-    return NextResponse.json(appointments);
+    const appointments = rows.map(({ payments, requirements, ...apt }) => {
+      const paid = sumCentavos(payments.map((p) => p.amount));
+      return {
+        ...apt,
+        amountPaid: fromCentavos(paid),
+        balanceDue: fromCentavos(balanceDueCentavos(apt.fee, paid)),
+        requirementsMet: requirements.filter((r) => r.isMet).length,
+        requirementsTotal: requirements.length,
+      };
+    });
+
+    // Outstanding balance only (replaces "has no payments at all").
+    const result = unpaid
+      ? appointments.filter((a) => toCentavos(a.fee) > 0 && a.balanceDue > 0)
+      : appointments;
+
+    return json(result);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch appointments' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'GET /api/appointments');
   }
 }
 
-// POST - Create new appointment
+// POST - Create a new appointment (admin only)
 export async function POST(request: NextRequest) {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const data = await request.json();
-
-    const {
-      sacramentType,
-      participantName,
-      participantPhone,
-      participantEmail,
-      barangay,
-      city,
-      province,
-      scheduledDate,
-      scheduledTime,
-      location,
-      notes,
-      status,
-      fee,
-      assignedPriestId,
-    } = data;
-
-    // Validate required fields
-    if (!sacramentType || !participantName || !scheduledDate || !scheduledTime) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
-
-    const appointment = await prisma.appointment.create({
-      data: {
-        sacramentType,
-        participantName,
-        participantPhone,
-        participantEmail,
-        barangay,
-        city: city || 'Urdaneta City',
-        province: province || 'Pangasinan',
-        scheduledDate: new Date(scheduledDate),
-        scheduledTime,
-        location: location || 'Immaculate Conception Cathedral Parish',
-        notes,
-        status: 'PENDING', // Always PENDING for new appointments
-        fee: fee || 0,
-        createdById: user.id, // Use session user's ID
-        assignedPriestId: assignedPriestId || null,
-      },
-    });
-
-    return NextResponse.json(appointment, { status: 201 });
+    const user = await requireUser(['ADMIN'], 'Only administrators can create appointments');
+    const input = await parseBody(request, appointmentCreateSchema);
+    const appointment = await createAppointment(user, input);
+    return json(appointment, 201);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to create appointment' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'POST /api/appointments');
   }
 }

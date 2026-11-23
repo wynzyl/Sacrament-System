@@ -9,10 +9,8 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Starting database seed...');
 
-  // Hash password for all users
   const hashedPassword = await bcrypt.hash('password123', 10);
 
-  // Create Admin user
   const admin = await prisma.user.upsert({
     where: { email: 'admin@church.com' },
     update: {},
@@ -25,7 +23,6 @@ async function main() {
   });
   console.log('Created admin user:', admin.email);
 
-  // Create Priest user
   const priest = await prisma.user.upsert({
     where: { email: 'priest@church.com' },
     update: {},
@@ -38,7 +35,6 @@ async function main() {
   });
   console.log('Created priest user:', priest.email);
 
-  // Create Cashier user
   const cashier = await prisma.user.upsert({
     where: { email: 'cashier@church.com' },
     update: {},
@@ -51,50 +47,66 @@ async function main() {
   });
   console.log('Created cashier user:', cashier.email);
 
-  // Create sample appointments
-  const baptism = await prisma.appointment.create({
-    data: {
+  const baptism = await prisma.appointment.upsert({
+    where: { referenceNumber: 'SAC-2026-BAPT01' },
+    update: {},
+    create: {
+      referenceNumber: 'SAC-2026-BAPT01',
+      source: 'STAFF',
       sacramentType: 'BAPTISM',
       participantName: 'Baby John Doe',
       participantPhone: '09123456789',
       participantEmail: 'parent@email.com',
-      scheduledDate: new Date('2026-02-15'),
-      scheduledTime: '10:00 AM',
-      location: 'Main Church',
+      scheduledDate: new Date('2026-12-15T00:00:00.000Z'),
+      scheduledTime: '10:00',
+      location: 'Immaculate Conception Cathedral Parish',
       notes: 'Parents: John and Jane Doe',
       status: 'CONFIRMED',
-      fee: 500,
+      fee: '500.00',
       createdById: admin.id,
+      assignedPriestId: priest.id,
     },
   });
-  console.log('Created baptism appointment');
+  console.log('Created baptism appointment:', baptism.referenceNumber);
 
-  const wedding = await prisma.appointment.create({
-    data: {
+  const wedding = await prisma.appointment.upsert({
+    where: { referenceNumber: 'SAC-2026-WEDD01' },
+    update: {},
+    create: {
+      referenceNumber: 'SAC-2026-WEDD01',
+      source: 'STAFF',
       sacramentType: 'WEDDING',
       participantName: 'Mark & Lisa Garcia',
       participantPhone: '09187654321',
       participantEmail: 'mark@email.com',
-      scheduledDate: new Date('2026-03-20'),
-      scheduledTime: '2:00 PM',
-      location: 'Main Church',
+      scheduledDate: new Date('2026-12-20T00:00:00.000Z'),
+      scheduledTime: '14:00',
+      location: 'Immaculate Conception Cathedral Parish',
       notes: 'Wedding ceremony with 100 guests',
-      status: 'CONFIRMED',
-      fee: 5000,
+      status: 'PENDING',
+      fee: '5000.00',
       createdById: admin.id,
+      assignedPriestId: priest.id,
     },
   });
-  console.log('Created wedding appointment');
+  console.log('Created wedding appointment:', wedding.referenceNumber);
 
-  // Create sample payment for baptism
-  const payment = await prisma.payment.create({
-    data: {
-      amount: 500,
+  await prisma.payment.upsert({
+    where: { receiptNumber: 'RCP-2026-00001' },
+    update: {},
+    create: {
+      kind: 'PAYMENT',
+      amount: '500.00',
       paymentMethod: 'CASH',
-      receiptNumber: 'RCP-2026-0001',
+      receiptNumber: 'RCP-2026-00001',
       appointmentId: baptism.id,
       processedById: cashier.id,
     },
+  });
+  await prisma.counter.upsert({
+    where: { key: 'RCP-2026' },
+    update: {},
+    create: { key: 'RCP-2026', value: 1 },
   });
   console.log('Created sample payment');
 

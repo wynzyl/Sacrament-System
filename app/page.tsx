@@ -4,6 +4,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
@@ -34,7 +35,7 @@ export default function LoginPage() {
               break;
           }
         }
-      } catch (error) {
+      } catch {
         // Not logged in, stay on login page
       } finally {
         setCheckingSession(false);
@@ -51,7 +52,6 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      // Call login API
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,7 +64,6 @@ export default function LoginPage() {
         throw new Error(data.error || 'Login failed');
       }
 
-      // Redirect based on user role (session cookie is set automatically by server)
       switch (data.user.role) {
         case 'ADMIN':
           router.push('/admin');
@@ -85,7 +84,6 @@ export default function LoginPage() {
     }
   };
 
-  // Show loading while checking session
   if (checkingSession) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600 flex items-center justify-center">
@@ -102,20 +100,42 @@ export default function LoginPage() {
 
       <div className="w-full max-w-md relative z-10">
         {/* Header section with icon */}
-        <div className="text-center mb-10">
+        <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white rounded-full mb-6 shadow-lg">
             <span className="text-4xl">✝️</span>
           </div>
           <p className="text-blue-100 text-xl">Immaculate Conception Cathedral Parish</p>
-          <h1 className="text-4xl font-bold text-white mb-3">
-            Church Management
-          </h1>
-          <p className="text-blue-100 text-lg">Sacrament Schedule & Payment Tracking</p>
+          <h1 className="text-4xl font-bold text-white mb-3">Church Management</h1>
+          <p className="text-blue-100 text-lg">Sacrament Schedule &amp; Payment Tracking</p>
+        </div>
+
+        {/* Parishioner self-service card */}
+        <div className="bg-white/95 rounded-2xl shadow-xl p-5 mb-5">
+          <p className="text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
+            For Parishioners
+          </p>
+          <p className="text-sm text-gray-700 mb-3">
+            View sacrament requirements, request a schedule online, or check your booking status:
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <Link
+              href="/book"
+              className="text-center py-2.5 px-3 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Request Booking
+            </Link>
+            <Link
+              href="/track"
+              className="text-center py-2.5 px-3 border border-blue-600 text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              Track Request
+            </Link>
+          </div>
         </div>
 
         {/* Login card */}
         <div className="bg-white rounded-2xl shadow-2xl p-8 backdrop-blur-sm">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Sign In</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Staff Sign In</h2>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
@@ -140,9 +160,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Password
-              </label>
+              <label className="block text-sm font-semibold text-gray-700 mb-3">Password</label>
               <input
                 type="password"
                 value={password}
@@ -161,8 +179,20 @@ export default function LoginPage() {
               {loading ? (
                 <span className="flex items-center justify-center">
                   <svg className="animate-spin h-5 w-5 mr-2" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
                   </svg>
                   Logging in...
                 </span>
@@ -174,7 +204,9 @@ export default function LoginPage() {
 
           {/* Credentials section */}
           <div className="mt-8 pt-8 border-t border-gray-200">
-            <p className="text-center text-sm font-semibold text-gray-700 mb-4">Demo Credentials</p>
+            <p className="text-center text-sm font-semibold text-gray-700 mb-4">
+              Demo Credentials
+            </p>
             <div className="space-y-3">
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="text-xs font-semibold text-blue-900">ADMIN</p>
