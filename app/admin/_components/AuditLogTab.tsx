@@ -4,7 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { AuditLogEntry } from '@/types';
 import { formatDateTime } from '@/lib/utils';
 
-const ENTITY_TYPES = ['Appointment', 'Payment', 'User', 'AppointmentRequirement'] as const;
+const ENTITY_TYPES = [
+  'Appointment',
+  'Payment',
+  'OnlinePaymentIntent',
+  'User',
+  'AppointmentRequirement',
+] as const;
 
 const ACTOR_BADGE: Record<string, string> = {
   USER: 'bg-blue-100 text-blue-800',

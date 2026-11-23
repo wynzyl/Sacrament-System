@@ -42,7 +42,10 @@ export async function createReversalEntry(
   if (original.kind !== 'PAYMENT') {
     throw new ApiError(409, 'A reversal entry cannot be reversed');
   }
-  const already = await tx.payment.findUnique({ where: { reversesPaymentId: original.id }, select: { id: true } });
+  const already = await tx.payment.findUnique({
+    where: { reversesPaymentId: original.id },
+    select: { id: true },
+  });
   if (already) {
     throw new ApiError(409, `Receipt ${original.receiptNumber} was already reversed`);
   }
@@ -53,6 +56,8 @@ export async function createReversalEntry(
       kind: 'REVERSAL',
       amount: new Prisma.Decimal(original.amount).neg(),
       paymentMethod: original.paymentMethod,
+      provider: original.provider,
+      providerChannel: original.providerChannel,
       receiptNumber,
       appointmentId: original.appointmentId,
       processedById: actor.id,
@@ -77,19 +82,31 @@ export async function createReversalEntry(
 export interface PaymentSummary {
   cash: number;
   gcash: number;
+  onlineWallet: number;
+  bankTransfer: number;
   total: number;
 }
 
-/** Cash / GCash / total of a ledger slice, net of reversals, computed in centavos. */
+/** Cash / GCash / Online Wallet / Bank Transfer / total of a ledger slice, net of reversals, computed in centavos. */
 export function summarizePayments(
   payments: { amount: Prisma.Decimal | number | string; paymentMethod: string }[]
 ): PaymentSummary {
   let cash = 0;
   let gcash = 0;
+  let onlineWallet = 0;
+  let bankTransfer = 0;
   for (const p of payments) {
     const c = sumCentavos([p.amount]);
     if (p.paymentMethod === 'CASH') cash += c;
     else if (p.paymentMethod === 'GCASH') gcash += c;
+    else if (p.paymentMethod === 'ONLINE_WALLET') onlineWallet += c;
+    else if (p.paymentMethod === 'BANK_TRANSFER') bankTransfer += c;
   }
-  return { cash: fromCentavos(cash), gcash: fromCentavos(gcash), total: fromCentavos(cash + gcash) };
+  return {
+    cash: fromCentavos(cash),
+    gcash: fromCentavos(gcash),
+    onlineWallet: fromCentavos(onlineWallet),
+    bankTransfer: fromCentavos(bankTransfer),
+    total: fromCentavos(cash + gcash + onlineWallet + bankTransfer),
+  };
 }

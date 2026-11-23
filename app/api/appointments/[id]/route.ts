@@ -33,6 +33,9 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
     if (user.role === 'PRIEST' && appointment.assignedPriestId !== user.id) {
       throw new ApiError(403, 'Access denied');
     }
+    if (user.role === 'PARISHIONER' && appointment.createdById !== user.id) {
+      throw new ApiError(403, 'Access denied');
+    }
 
     return json(appointment);
   } catch (error) {

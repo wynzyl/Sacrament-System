@@ -30,7 +30,13 @@ type Db = Prisma.TransactionClient | PrismaClient;
 export interface AuditEntry {
   actor: AuditActor;
   action: string;
-  entityType: 'Appointment' | 'Payment' | 'User' | 'AppointmentRequirement';
+  entityType:
+    | 'Appointment'
+    | 'Payment'
+    | 'User'
+    | 'AppointmentRequirement'
+    | 'OnlinePaymentIntent'
+    | 'EmailVerificationToken';
   entityId: string;
   before?: unknown;
   after?: unknown;
@@ -48,7 +54,8 @@ export async function writeAudit(db: Db, entry: AuditEntry): Promise<void> {
       action: entry.action,
       entityType: entry.entityType,
       entityId: entry.entityId,
-      before: entry.before === undefined || entry.before === null ? undefined : toPlain(entry.before),
+      before:
+        entry.before === undefined || entry.before === null ? undefined : toPlain(entry.before),
       after: entry.after === undefined || entry.after === null ? undefined : toPlain(entry.after),
       reason: entry.reason ?? null,
     },
@@ -82,7 +89,10 @@ const APPOINTMENT_PII_FIELDS = [
   'notes',
 ] as const;
 
-function pick(source: Record<string, unknown>, fields: readonly string[]): Record<string, unknown> {
+function pick(
+  source: Record<string, unknown>,
+  fields: readonly string[]
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const f of fields) {
     if (f in source) out[f] = source[f];
@@ -128,6 +138,9 @@ export function paymentSnapshot(p: object): Record<string, unknown> {
     'kind',
     'amount',
     'paymentMethod',
+    'provider',
+    'providerChannel',
+    'providerRef',
     'receiptNumber',
     'appointmentId',
     'reversesPaymentId',
@@ -138,5 +151,12 @@ export function paymentSnapshot(p: object): Record<string, unknown> {
 
 export function userSnapshot(u: object): Record<string, unknown> {
   // Never includes the password hash.
-  return pick(u as Record<string, unknown>, ['id', 'email', 'name', 'role', 'status', 'availability']);
+  return pick(u as Record<string, unknown>, [
+    'id',
+    'email',
+    'name',
+    'role',
+    'status',
+    'availability',
+  ]);
 }

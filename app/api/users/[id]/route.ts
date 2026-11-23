@@ -27,7 +27,7 @@ const USER_SELECT = {
 // GET single user
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   try {
-    await requireUser();
+    await requireUser(['ADMIN', 'CASHIER', 'PRIEST']);
     const { id } = await params;
 
     const target = await prisma.user.findFirst({ where: { id, deletedAt: null }, select: USER_SELECT });

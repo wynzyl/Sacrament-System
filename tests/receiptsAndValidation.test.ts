@@ -76,7 +76,7 @@ describe('R1-2 Audit privacy, R1-5 Receipt format & R1-8 Public booking validati
         amount: 500,
         paymentMethod: 'GCASH',
       })
-    ).toThrow(/GCash reference/);
+    ).toThrow(/reference number is required/);
 
     // Negative or >2dp amounts are rejected
     expect(() =>

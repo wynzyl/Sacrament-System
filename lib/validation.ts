@@ -3,11 +3,23 @@
 // shared by the route handlers; business rules live in the service layer.
 
 import { z } from 'zod';
-import { AppointmentStatus, PaymentMethod, PriestAvailability, SacramentType, UserRole, UserStatus } from '@prisma/client';
+import {
+  AppointmentStatus,
+  PaymentMethod,
+  PriestAvailability,
+  SacramentType,
+  UserRole,
+  UserStatus,
+} from '@prisma/client';
 import { isValidMoney } from '@/lib/money';
 import { isValidDateOnly } from '@/lib/dates';
 import { BOOKING_CONFIG } from '@/lib/scheduling';
-import { URDANETA_BARANGAYS } from '@/lib/constants';
+import {
+  ALL_PROVIDER_CHANNEL_IDS,
+  BANK_TRANSFER_CHANNELS,
+  ONLINE_WALLET_CHANNELS,
+  URDANETA_BARANGAYS,
+} from '@/lib/constants';
 
 // ---------------------------------------------------------------------------
 // Building blocks
@@ -18,7 +30,10 @@ const emptyToNull = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? 
 
 /** Optional trimmed text. undefined stays undefined (patch-friendly), '' becomes null. */
 const optText = (max: number) =>
-  z.preprocess(emptyToNull, z.string().trim().max(max, `Must be at most ${max} characters`).nullable().optional());
+  z.preprocess(
+    emptyToNull,
+    z.string().trim().max(max, `Must be at most ${max} characters`).nullable().optional()
+  );
 
 const money = z
   .number({ error: 'Amount must be a number' })
@@ -48,7 +63,10 @@ const phone = z
     return digits >= 10 && digits <= 15;
   }, 'Enter the full mobile number, e.g. 0917 123 4567');
 
-const optEmail = z.preprocess(emptyToNull, z.email('Enter a valid email address').max(160).nullable().optional());
+const optEmail = z.preprocess(
+  emptyToNull,
+  z.email('Enter a valid email address').max(160).nullable().optional()
+);
 
 const reason = z
   .string({ error: 'A reason is required' })
@@ -62,7 +80,11 @@ const reason = z
 
 const appointmentFields = {
   sacramentType: z.enum(SacramentType, { error: 'Choose a sacrament' }),
-  participantName: z.string({ error: 'Participant name is required' }).trim().min(1, 'Participant name is required').max(120),
+  participantName: z
+    .string({ error: 'Participant name is required' })
+    .trim()
+    .min(1, 'Participant name is required')
+    .max(120),
   participantPhone: optText(30),
   participantEmail: optEmail,
   barangay: optText(80),
@@ -94,10 +116,13 @@ export const cancelSchema = z.object({
 });
 export type CancelInput = z.infer<typeof cancelSchema>;
 
-export const requirementUpdateSchema = z.object({ key: z.string().min(1).max(80), isMet: z.boolean() });
+export const requirementUpdateSchema = z.object({
+  key: z.string().min(1).max(80),
+  isMet: z.boolean(),
+});
 
 // ---------------------------------------------------------------------------
-// Payments
+// Payments (in-office & online gateway)
 // ---------------------------------------------------------------------------
 
 export const paymentCreateSchema = z
@@ -105,22 +130,90 @@ export const paymentCreateSchema = z
     appointmentId: z.string().min(1, 'Appointment is required'),
     amount: positiveMoney,
     paymentMethod: z.enum(PaymentMethod, { error: 'Choose a payment method' }),
-    gcashRefNumber: z.preprocess(emptyToNull, z.string().trim().min(3).max(64).nullable().optional()),
+    gcashRefNumber: z.preprocess(
+      emptyToNull,
+      z.string().trim().min(3).max(64).nullable().optional()
+    ),
+    providerChannel: z.preprocess(
+      emptyToNull,
+      z.string().trim().min(2).max(40).nullable().optional()
+    ),
   })
-  .refine((v) => v.paymentMethod !== 'GCASH' || !!v.gcashRefNumber, {
-    path: ['gcashRefNumber'],
-    message: 'A GCash reference number is required',
-  });
+  .refine(
+    (v) =>
+      v.paymentMethod === 'CASH' ||
+      (!!v.gcashRefNumber && v.gcashRefNumber.trim().length >= 3),
+    {
+      path: ['gcashRefNumber'],
+      message: 'A reference number is required for GCash, Online Wallet, and Bank Transfer payments',
+    }
+  );
 export type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
 
 export const reverseSchema = z.object({ reason });
+
+const onlineWalletChannelIds = ONLINE_WALLET_CHANNELS.map((c) => c.id) as [string, ...string[]];
+const bankTransferChannelIds = BANK_TRANSFER_CHANNELS.map((c) => c.id) as [string, ...string[]];
+const allChannelIds = ALL_PROVIDER_CHANNEL_IDS as unknown as [string, ...string[]];
+
+export const onlineCheckoutCreateSchema = z
+  .object({
+    reference: z.string().trim().min(6).max(30),
+    contact: z.string().trim().min(5).max(160),
+    paymentMethod: z.enum(['ONLINE_WALLET', 'BANK_TRANSFER'], {
+      error: 'Choose Online Wallet or Bank Transfer',
+    }),
+    providerChannel: z.enum(allChannelIds, {
+      error: 'Choose a supported wallet or bank channel',
+    }),
+  })
+  .refine(
+    (v) =>
+      (v.paymentMethod === 'ONLINE_WALLET' &&
+        onlineWalletChannelIds.includes(v.providerChannel)) ||
+      (v.paymentMethod === 'BANK_TRANSFER' &&
+        bankTransferChannelIds.includes(v.providerChannel)),
+    {
+      path: ['providerChannel'],
+      message: 'Selected channel does not match the chosen payment method',
+    }
+  );
+export type OnlineCheckoutCreateInput = z.infer<typeof onlineCheckoutCreateSchema>;
+
+export const sandboxSettleSchema = z.object({
+  referenceNumber: z.preprocess(
+    emptyToNull,
+    z.string().trim().min(4).max(64).nullable().optional()
+  ),
+  outcome: z.enum(['PAID', 'FAILED']).optional(),
+});
+
+export const paymentWebhookEventSchema = z.object({
+  eventId: z.string().trim().min(4).max(120),
+  type: z.enum(['payment.paid', 'payment.failed']),
+  providerIntentId: z.string().trim().min(4).max(120),
+  providerRef: z.string().trim().min(4).max(120),
+  providerChannel: z.string().trim().min(2).max(40).optional(),
+  amount: positiveMoney,
+  referenceNumber: z.string().trim().max(64).optional(),
+});
+export type PaymentWebhookEventInput = z.infer<typeof paymentWebhookEventSchema>;
 
 // ---------------------------------------------------------------------------
 // Audit log query
 // ---------------------------------------------------------------------------
 
 export const auditQuerySchema = z.object({
-  entityType: z.enum(['Appointment', 'Payment', 'User', 'AppointmentRequirement']).optional(),
+  entityType: z
+    .enum([
+      'Appointment',
+      'Payment',
+      'User',
+      'AppointmentRequirement',
+      'OnlinePaymentIntent',
+      'EmailVerificationToken',
+    ])
+    .optional(),
   entityId: z.string().min(1).optional(),
   from: dateOnly.optional(),
   to: dateOnly.optional(),
@@ -138,7 +231,11 @@ export const onlineSacramentSchema = z.enum(BOOKING_CONFIG.onlineSacraments, {
 
 export const publicBookingSchema = z.object({
   sacramentType: onlineSacramentSchema,
-  participantName: z.string({ error: 'Name is required' }).trim().min(2, 'Please enter the full name').max(120),
+  participantName: z
+    .string({ error: 'Name is required' })
+    .trim()
+    .min(2, 'Please enter the full name')
+    .max(120),
   participantPhone: phone,
   participantEmail: optEmail,
   barangay: z.preprocess(
@@ -146,7 +243,12 @@ export const publicBookingSchema = z.object({
     z.enum(URDANETA_BARANGAYS, { error: 'Choose a barangay from the list' }).nullable().optional()
   ),
   scheduledDate: dateOnly,
-  scheduledTime: z.string().refine((t) => (BOOKING_CONFIG.slots as readonly string[]).includes(t), 'Choose an available time'),
+  scheduledTime: z
+    .string()
+    .refine(
+      (t) => (BOOKING_CONFIG.slots as readonly string[]).includes(t),
+      'Choose an available time'
+    ),
   notes: optText(500),
   consent: z.literal(true, { error: 'Please agree to the data privacy notice to continue' }),
   // Honeypot: real users never see or fill this.
@@ -168,8 +270,15 @@ export const trackSchema = z.object({
 // Users (admin)
 // ---------------------------------------------------------------------------
 
-const userEmail = z.string({ error: 'Email is required' }).trim().toLowerCase().pipe(z.email('Enter a valid email address'));
-const userPassword = z.string({ error: 'Password is required' }).min(8, 'Password must be at least 8 characters').max(128);
+const userEmail = z
+  .string({ error: 'Email is required' })
+  .trim()
+  .toLowerCase()
+  .pipe(z.email('Enter a valid email address'));
+const userPassword = z
+  .string({ error: 'Password is required' })
+  .min(8, 'Password must be at least 8 characters')
+  .max(128);
 
 export const userCreateSchema = z.object({
   email: userEmail,
@@ -189,3 +298,38 @@ export const userUpdateSchema = z.object({
   status: z.enum(UserStatus).optional(),
   availability: z.enum(PriestAvailability).optional(),
 });
+
+// ---------------------------------------------------------------------------
+// Parishioner OAuth-like Email Authentication & Confirmation
+// ---------------------------------------------------------------------------
+
+export const parishionerRegisterSchema = z.object({
+  name: z
+    .string({ error: 'Full name is required' })
+    .trim()
+    .min(2, 'Please enter your full name (at least 2 characters)')
+    .max(120),
+  email: userEmail,
+  password: userPassword,
+  phone: z.preprocess(emptyToNull, phone.nullable().optional()),
+  barangay: z.preprocess(
+    emptyToNull,
+    z.enum(URDANETA_BARANGAYS, { error: 'Choose a barangay from the list' }).nullable().optional()
+  ),
+});
+export type ParishionerRegisterInput = z.infer<typeof parishionerRegisterSchema>;
+
+export const parishionerEmailRequestSchema = z.object({
+  email: userEmail,
+  purpose: z.enum(['EMAIL_CONFIRMATION', 'MAGIC_SIGNIN']).default('EMAIL_CONFIRMATION'),
+});
+export type ParishionerEmailRequestInput = z.infer<typeof parishionerEmailRequestSchema>;
+
+export const emailTokenVerifySchema = z.object({
+  token: z
+    .string({ error: 'Verification token is required' })
+    .trim()
+    .min(16, 'Invalid verification link')
+    .max(200),
+});
+export type EmailTokenVerifyInput = z.infer<typeof emailTokenVerifySchema>;

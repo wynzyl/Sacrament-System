@@ -3,9 +3,17 @@
 import { useState, useCallback } from 'react';
 import { Payment, PaymentSummary } from '@/types';
 
+const DEFAULT_SUMMARY: PaymentSummary = {
+  cash: 0,
+  gcash: 0,
+  onlineWallet: 0,
+  bankTransfer: 0,
+  total: 0,
+};
+
 export function usePayments() {
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [summary, setSummary] = useState<PaymentSummary>({ cash: 0, gcash: 0, total: 0 });
+  const [summary, setSummary] = useState<PaymentSummary>(DEFAULT_SUMMARY);
   const [loading, setLoading] = useState(false);
 
   const fetchTodayPayments = useCallback(async () => {
@@ -14,7 +22,7 @@ export function usePayments() {
       const response = await fetch('/api/payments/today');
       const data = await response.json();
       setPayments(data.payments || []);
-      setSummary(data.summary || { cash: 0, gcash: 0, total: 0 });
+      setSummary(data.summary || DEFAULT_SUMMARY);
     } catch (error) {
       console.error('Error fetching payments:', error);
     } finally {
@@ -28,6 +36,7 @@ export function usePayments() {
       amount: number;
       paymentMethod: string;
       gcashRefNumber?: string | null;
+      providerChannel?: string | null;
     }) => {
       const response = await fetch('/api/payments', {
         method: 'POST',

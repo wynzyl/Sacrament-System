@@ -19,7 +19,14 @@ import type { PaymentCreateInput } from '@/lib/validation';
 
 const PAYMENT_INCLUDE = {
   appointment: {
-    select: { id: true, participantName: true, sacramentType: true, scheduledDate: true, referenceNumber: true, status: true },
+    select: {
+      id: true,
+      participantName: true,
+      sacramentType: true,
+      scheduledDate: true,
+      referenceNumber: true,
+      status: true,
+    },
   },
   processedBy: { select: { name: true } },
 } as const;
@@ -31,7 +38,9 @@ export async function createPayment(actor: SessionUser, input: PaymentCreateInpu
 
   return prisma.$transaction(async (tx) => {
     await lockAppointmentRow(tx, input.appointmentId);
-    const appointment = await tx.appointment.findFirst({ where: { id: input.appointmentId, deletedAt: null } });
+    const appointment = await tx.appointment.findFirst({
+      where: { id: input.appointmentId, deletedAt: null },
+    });
     if (!appointment) throw new ApiError(404, 'Appointment not found');
     if (appointment.status === 'CANCELLED') {
       throw new ApiError(409, 'Cannot take a payment for a cancelled appointment');
@@ -42,7 +51,8 @@ export async function createPayment(actor: SessionUser, input: PaymentCreateInpu
 
     const paid = await netPaidCentavos(tx, appointment.id);
     const balance = balanceDueCentavos(appointment.fee, paid);
-    if (balance === 0) throw new ApiError(409, 'This appointment is already fully paid', 'ALREADY_PAID');
+    if (balance === 0)
+      throw new ApiError(409, 'This appointment is already fully paid', 'ALREADY_PAID');
 
     const amount = toCentavos(input.amount);
     if (amount > balance) {
@@ -53,17 +63,38 @@ export async function createPayment(actor: SessionUser, input: PaymentCreateInpu
       );
     }
 
-    // A GCash reference identifies one real-world transaction: it can be
-    // recorded once, even if the receipt was later reversed.
-    if (input.paymentMethod === 'GCASH' && input.gcashRefNumber) {
+    const needsReference =
+      input.paymentMethod === 'GCASH' ||
+      input.paymentMethod === 'ONLINE_WALLET' ||
+      input.paymentMethod === 'BANK_TRANSFER';
+
+    // A wallet or bank reference identifies one real-world transaction: it can
+    // be recorded once, even if the receipt was later reversed.
+    if (needsReference && input.gcashRefNumber) {
       const dup = await tx.payment.findFirst({
-        where: { kind: 'PAYMENT', gcashRefNumber: { equals: input.gcashRefNumber, mode: 'insensitive' } },
+        where: {
+          kind: 'PAYMENT',
+          gcashRefNumber: { equals: input.gcashRefNumber, mode: 'insensitive' },
+        },
         select: { receiptNumber: true },
       });
       if (dup) {
-        throw new ApiError(409, `That GCash reference was already recorded on receipt ${dup.receiptNumber}`, 'DUPLICATE_REFERENCE');
+        throw new ApiError(
+          409,
+          `That transaction reference was already recorded on receipt ${dup.receiptNumber}`,
+          'DUPLICATE_REFERENCE'
+        );
       }
     }
+
+    const defaultChannel =
+      input.paymentMethod === 'GCASH'
+        ? 'GCASH'
+        : input.paymentMethod === 'ONLINE_WALLET'
+        ? input.providerChannel ?? 'MAYA'
+        : input.paymentMethod === 'BANK_TRANSFER'
+        ? input.providerChannel ?? 'INSTAPAY'
+        : null;
 
     const receiptNumber = await allocateReceiptNumber(tx, 'RCP');
     const payment = await tx.payment.create({
@@ -71,7 +102,9 @@ export async function createPayment(actor: SessionUser, input: PaymentCreateInpu
         kind: 'PAYMENT',
         amount: (amount / 100).toFixed(2),
         paymentMethod: input.paymentMethod,
-        gcashRefNumber: input.paymentMethod === 'GCASH' ? input.gcashRefNumber ?? null : null,
+        gcashRefNumber: needsReference ? input.gcashRefNumber ?? null : null,
+        provider: needsReference ? 'MANUAL' : null,
+        providerChannel: defaultChannel,
         receiptNumber,
         appointmentId: appointment.id,
         processedById: actor.id,
@@ -90,7 +123,10 @@ export async function createPayment(actor: SessionUser, input: PaymentCreateInpu
     // Payment confirms a pending booking (existing behaviour, now a validated
     // SYSTEM transition and audited).
     if (appointment.status === 'PENDING' && canTransition('PENDING', 'CONFIRMED', 'SYSTEM')) {
-      await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'CONFIRMED' } });
+      await tx.appointment.update({
+        where: { id: appointment.id },
+        data: { status: 'CONFIRMED' },
+      });
       await writeAudit(tx, {
         actor: userActor(actor),
         action: 'appointment.status_change',
@@ -119,11 +155,16 @@ export async function reversePayment(actor: SessionUser, paymentId: string, reas
 
     // A confirmed booking with nothing left paid returns to PENDING.
     let appointmentReturnedToPending = false;
-    const appointment = await tx.appointment.findUnique({ where: { id: original.appointmentId } });
+    const appointment = await tx.appointment.findUnique({
+      where: { id: original.appointmentId },
+    });
     if (appointment && appointment.status === 'CONFIRMED') {
       const net = await netPaidCentavos(tx, appointment.id);
       if (net <= 0 && canTransition('CONFIRMED', 'PENDING', 'SYSTEM')) {
-        const updated = await tx.appointment.update({ where: { id: appointment.id }, data: { status: 'PENDING' } });
+        const updated = await tx.appointment.update({
+          where: { id: appointment.id },
+          data: { status: 'PENDING' },
+        });
         await writeAudit(tx, {
           actor: userActor(actor),
           action: 'appointment.status_change',
@@ -137,7 +178,10 @@ export async function reversePayment(actor: SessionUser, paymentId: string, reas
       }
     }
 
-    const full = await tx.payment.findUniqueOrThrow({ where: { id: reversal.id }, include: PAYMENT_INCLUDE });
+    const full = await tx.payment.findUniqueOrThrow({
+      where: { id: reversal.id },
+      include: PAYMENT_INCLUDE,
+    });
     return { reversal: full, appointmentReturnedToPending };
   }, TX_OPTIONS);
 }

@@ -110,6 +110,46 @@ async function main() {
   });
   console.log('Created sample payment');
 
+  await prisma.appointment.upsert({
+    where: { referenceNumber: 'SAC-2026-CONF01' },
+    update: {},
+    create: {
+      referenceNumber: 'SAC-2026-CONF01',
+      source: 'ONLINE',
+      sacramentType: 'CONFIRMATION',
+      participantName: 'Juan Dela Cruz',
+      participantPhone: '09171234567',
+      participantEmail: 'juan@email.com',
+      barangay: 'Poblacion',
+      scheduledDate: new Date('2026-12-18T00:00:00.000Z'),
+      scheduledTime: '09:00',
+      location: 'Immaculate Conception Cathedral Parish',
+      status: 'PENDING',
+      fee: '1500.00',
+      assignedPriestId: priest.id,
+    },
+  });
+
+  await prisma.appointment.upsert({
+    where: { referenceNumber: 'SAC-2026-COMM01' },
+    update: {},
+    create: {
+      referenceNumber: 'SAC-2026-COMM01',
+      source: 'ONLINE',
+      sacramentType: 'FIRST_COMMUNION',
+      participantName: 'Maria Clara Santos',
+      participantPhone: '09171234567',
+      participantEmail: 'maria@email.com',
+      barangay: 'San Vicente',
+      scheduledDate: new Date('2026-12-19T00:00:00.000Z'),
+      scheduledTime: '10:00',
+      location: 'Immaculate Conception Cathedral Parish',
+      status: 'PENDING',
+      fee: '800.00',
+      assignedPriestId: priest.id,
+    },
+  });
+
   console.log('Seed completed successfully!');
 }
 

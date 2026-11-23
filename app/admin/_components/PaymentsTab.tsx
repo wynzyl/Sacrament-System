@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { usePayments } from '@/lib/hooks/usePayments';
 import { Modal } from '@/components/Modal';
+import { PAYMENT_METHOD_LABELS, PROVIDER_CHANNEL_LABELS } from '@/lib/constants';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { Payment, PaymentSummary } from '@/types';
 
@@ -26,7 +27,9 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
 
   const data = payments.length > 0 ? payments : initialPayments || [];
   const summ =
-    payments.length > 0 ? summary : initialSummary || { cash: 0, gcash: 0, total: 0 };
+    payments.length > 0
+      ? summary
+      : initialSummary || { cash: 0, gcash: 0, onlineWallet: 0, bankTransfer: 0, total: 0 };
 
   const handleConfirmReverse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,18 +56,30 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
     <div>
       <h2 className="text-xl font-bold mb-6">Today&apos;s Payments (Net of Reversals)</h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500">Cash Total (Net)</h3>
-          <p className="text-3xl font-bold text-green-600">{formatCurrency(summ.cash)}</p>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="bg-white p-5 rounded-lg shadow">
+          <h3 className="text-xs font-medium text-gray-500">Cash Total (Net)</h3>
+          <p className="text-2xl font-bold text-green-600">{formatCurrency(summ.cash)}</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500">GCash Total (Net)</h3>
-          <p className="text-3xl font-bold text-blue-600">{formatCurrency(summ.gcash)}</p>
+        <div className="bg-white p-5 rounded-lg shadow">
+          <h3 className="text-xs font-medium text-gray-500">GCash Total (Net)</h3>
+          <p className="text-2xl font-bold text-blue-600">{formatCurrency(summ.gcash)}</p>
         </div>
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-sm font-medium text-gray-500">Overall Total (Net)</h3>
-          <p className="text-3xl font-bold text-purple-600">{formatCurrency(summ.total)}</p>
+        <div className="bg-white p-5 rounded-lg shadow">
+          <h3 className="text-xs font-medium text-gray-500">Online Wallet (Net)</h3>
+          <p className="text-2xl font-bold text-indigo-600">
+            {formatCurrency(summ.onlineWallet ?? 0)}
+          </p>
+        </div>
+        <div className="bg-white p-5 rounded-lg shadow">
+          <h3 className="text-xs font-medium text-gray-500">Bank Transfer (Net)</h3>
+          <p className="text-2xl font-bold text-teal-600">
+            {formatCurrency(summ.bankTransfer ?? 0)}
+          </p>
+        </div>
+        <div className="bg-white p-5 rounded-lg shadow col-span-2 md:col-span-1">
+          <h3 className="text-xs font-medium text-gray-500">Overall Total (Net)</h3>
+          <p className="text-2xl font-bold text-purple-600">{formatCurrency(summ.total)}</p>
         </div>
       </div>
 
@@ -85,6 +100,9 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
             data.map((payment) => {
               const isReversal = payment.kind === 'REVERSAL' || payment.amount < 0;
               const alreadyReversed = !!payment.reversal;
+              const channelText = payment.providerChannel
+                ? PROVIDER_CHANNEL_LABELS[payment.providerChannel] || payment.providerChannel
+                : null;
               return (
                 <div
                   key={payment.id}
@@ -98,11 +116,16 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
                 >
                   <div className="flex justify-between items-start gap-4">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <p className="font-semibold">{payment.appointment.participantName}</p>
                         {isReversal && (
                           <span className="text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded font-semibold">
                             REVERSAL
+                          </span>
+                        )}
+                        {payment.provider && payment.provider !== 'MANUAL' && (
+                          <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">
+                            {payment.provider}
                           </span>
                         )}
                         {alreadyReversed && (
@@ -119,7 +142,8 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
                       </p>
                       <p className="text-xs text-gray-500">{formatDateTime(payment.createdAt)}</p>
                       <p className="text-xs text-gray-500">
-                        Processed by: {payment.processedBy?.name}
+                        Processed by: {payment.processedBy?.name || 'Online Payment Gateway'}
+                        {payment.gcashRefNumber ? ` • Ref: ${payment.gcashRefNumber}` : ''}
                       </p>
                       {payment.reason && (
                         <p className="text-xs text-red-700 mt-1">Reason: {payment.reason}</p>
@@ -133,7 +157,10 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
                       >
                         {formatCurrency(payment.amount)}
                       </p>
-                      <p className="text-xs text-gray-600">{payment.paymentMethod}</p>
+                      <p className="text-xs text-gray-600">
+                        {PAYMENT_METHOD_LABELS[payment.paymentMethod] || payment.paymentMethod}
+                        {channelText ? ` (${channelText})` : ''}
+                      </p>
                       <p className="text-xs font-mono text-gray-500">{payment.receiptNumber}</p>
                       {!isReversal && !alreadyReversed && (
                         <button
@@ -168,18 +195,22 @@ export function PaymentsTab({ initialPayments, initialSummary, onDataChange }: P
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
               <p className="font-semibold text-amber-900">
                 Receipt {reverseTarget.receiptNumber} — {formatCurrency(reverseTarget.amount)} (
-                {reverseTarget.paymentMethod})
+                {PAYMENT_METHOD_LABELS[reverseTarget.paymentMethod] || reverseTarget.paymentMethod})
               </p>
               <p className="text-amber-800 text-xs mt-1">
                 Participant: {reverseTarget.appointment.participantName}
               </p>
               <p className="text-amber-800 text-xs mt-1">
-                This will append a negative REVERSAL entry (RVS-...) to the ledger. The original receipt is preserved for audit.
+                This will append a negative REVERSAL entry (RVS-...) to the ledger. The original
+                receipt is preserved for audit.
               </p>
             </div>
 
             <div>
-              <label htmlFor="reverse-reason" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="reverse-reason"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Reason for Reversal (required)
               </label>
               <textarea

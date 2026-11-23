@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useReports } from '@/lib/hooks/useReports';
 import { DatePresetButtons } from '@/components/DatePresetButtons';
+import { PAYMENT_METHOD_LABELS, PROVIDER_CHANNEL_LABELS } from '@/lib/constants';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { ReportAppointment, ReportPayment } from '@/types';
 
@@ -172,25 +173,39 @@ export function ReportsTab() {
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="px-6 py-4 border-b bg-gray-50">
             <h3 className="text-lg font-bold">Collections Report (Net of Reversals)</h3>
-            <p className="text-sm text-gray-600">{collectionsData.payments.length} ledger entry(s) found</p>
+            <p className="text-sm text-gray-600">
+              {collectionsData.payments.length} ledger entry(s) found
+            </p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4 p-4 bg-gray-100 border-b">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-gray-100 border-b">
             <div className="text-center">
-              <p className="text-sm text-gray-600">Cash (Net)</p>
-              <p className="text-xl font-bold text-green-600">
+              <p className="text-xs text-gray-600">Cash (Net)</p>
+              <p className="text-lg font-bold text-green-600">
                 {formatCurrency(collectionsData.totals.cash)}
               </p>
             </div>
             <div className="text-center">
-              <p className="text-sm text-gray-600">GCash (Net)</p>
-              <p className="text-xl font-bold text-blue-600">
+              <p className="text-xs text-gray-600">GCash (Net)</p>
+              <p className="text-lg font-bold text-blue-600">
                 {formatCurrency(collectionsData.totals.gcash)}
               </p>
             </div>
             <div className="text-center">
-              <p className="text-sm text-gray-600">Total (Net)</p>
-              <p className="text-xl font-bold text-purple-600">
+              <p className="text-xs text-gray-600">Online Wallet (Net)</p>
+              <p className="text-lg font-bold text-indigo-600">
+                {formatCurrency(collectionsData.totals.onlineWallet ?? 0)}
+              </p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-600">Bank Transfer (Net)</p>
+              <p className="text-lg font-bold text-teal-600">
+                {formatCurrency(collectionsData.totals.bankTransfer ?? 0)}
+              </p>
+            </div>
+            <div className="text-center col-span-2 md:col-span-1">
+              <p className="text-xs text-gray-600">Total (Net)</p>
+              <p className="text-lg font-bold text-purple-600">
                 {formatCurrency(collectionsData.totals.total)}
               </p>
             </div>
@@ -237,13 +252,16 @@ export function ReportsTab() {
                           Amount
                         </th>
                         <th className="px-6 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                          Method
+                          Method / Channel
                         </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {payments.map((p) => {
                         const isReversal = p.kind === 'REVERSAL' || p.amount < 0;
+                        const channelText = p.providerChannel
+                          ? PROVIDER_CHANNEL_LABELS[p.providerChannel] || p.providerChannel
+                          : null;
                         return (
                           <tr key={p.id}>
                             <td className="px-6 py-3 text-sm">{p.appointment.participantName}</td>
@@ -258,7 +276,10 @@ export function ReportsTab() {
                             >
                               {formatCurrency(p.amount)}
                             </td>
-                            <td className="px-6 py-3 text-sm">{p.paymentMethod}</td>
+                            <td className="px-6 py-3 text-sm">
+                              {PAYMENT_METHOD_LABELS[p.paymentMethod] || p.paymentMethod}
+                              {channelText ? ` (${channelText})` : ''}
+                            </td>
                           </tr>
                         );
                       })}

@@ -17,7 +17,7 @@ const VALID_STATUSES = ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'];
 //   from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive, scheduled date)
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireUser();
+    const user = await requireUser(['ADMIN', 'PRIEST', 'CASHIER']);
 
     const params = request.nextUrl.searchParams;
     const statusParam = params.get('status');

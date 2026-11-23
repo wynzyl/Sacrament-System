@@ -8,6 +8,7 @@ import {
   SacramentType,
   AppointmentStatus,
   PaymentMethod,
+  OnlinePaymentStatus,
   AppointmentSource,
   PaymentKind,
 } from './enums';
@@ -20,9 +21,12 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
+  barangay?: string | null;
   role: UserRole | string;
   status?: UserStatus | string;
   availability?: PriestAvailability | string;
+  emailVerifiedAt?: string | null;
   createdAt?: string;
 }
 
@@ -111,6 +115,9 @@ export interface Payment {
   paymentMethod: PaymentMethod | string;
   receiptNumber: string;
   gcashRefNumber?: string | null;
+  provider?: string | null;
+  providerChannel?: string | null;
+  providerRef?: string | null;
   reason?: string | null;
   reversesPaymentId?: string | null;
   reversal?: {
@@ -130,13 +137,35 @@ export interface Payment {
   };
   processedBy?: {
     name: string;
-  };
+  } | null;
 }
 
 export interface PaymentSummary {
   cash: number;
   gcash: number;
+  onlineWallet?: number;
+  bankTransfer?: number;
   total: number;
+}
+
+export interface OnlinePaymentIntentPublic {
+  id: string;
+  providerIntentId: string;
+  provider: string;
+  paymentMethod: PaymentMethod | string;
+  providerChannel: string;
+  amount: number;
+  status: OnlinePaymentStatus | string;
+  referenceNumber?: string | null;
+  receiptNumber?: string | null;
+  expiresAt: string;
+  appointment: {
+    referenceNumber: string;
+    sacramentType: SacramentType | string;
+    scheduledDate: string;
+    scheduledTime: string;
+    location: string | null;
+  };
 }
 
 // ============================================
@@ -163,6 +192,9 @@ export interface ReportPayment {
   kind?: PaymentKind | string;
   amount: number;
   paymentMethod: PaymentMethod | string;
+  provider?: string | null;
+  providerChannel?: string | null;
+  providerRef?: string | null;
   receiptNumber: string;
   reason?: string | null;
   createdAt: string;
@@ -174,7 +206,7 @@ export interface ReportPayment {
   };
   processedBy?: {
     name: string;
-  };
+  } | null;
 }
 
 export interface CollectionsReportData {
@@ -193,7 +225,13 @@ export interface AuditLogEntry {
   actorName: string | null;
   actorRole: string | null;
   action: string;
-  entityType: 'Appointment' | 'Payment' | 'User' | 'AppointmentRequirement' | string;
+  entityType:
+    | 'Appointment'
+    | 'Payment'
+    | 'User'
+    | 'AppointmentRequirement'
+    | 'OnlinePaymentIntent'
+    | string;
   entityId: string;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;

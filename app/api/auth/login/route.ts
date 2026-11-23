@@ -53,6 +53,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Require email confirmation for Parishioner accounts
+    if (user.role === 'PARISHIONER' && !user.emailVerifiedAt) {
+      return NextResponse.json(
+        {
+          error:
+            'Your email address has not been confirmed yet. Please click the confirmation link sent to your email, or request a new confirmation link.',
+          code: 'EMAIL_NOT_VERIFIED',
+          email: user.email,
+        },
+        { status: 403 }
+      );
+    }
+
     // Create session and set cookie
     const token = await createSession(user.id);
     await setSessionCookie(token);

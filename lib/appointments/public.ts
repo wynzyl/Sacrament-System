@@ -5,8 +5,8 @@
 // (Constitution I and III).
 
 import { prisma } from '@/lib/prisma';
-import { ApiError } from '@/lib/http';
-import { PUBLIC_ACTOR, appointmentSnapshot, writeAudit } from '@/lib/audit';
+import { ApiError, type SessionUser } from '@/lib/http';
+import { PUBLIC_ACTOR, userActor, appointmentSnapshot, writeAudit } from '@/lib/audit';
 import { dateOnlyToUtc, manilaDateString } from '@/lib/dates';
 import { generateReferenceNumber, normalizeReference } from '@/lib/reference';
 import { requirementsFor } from '@/lib/requirements';
@@ -35,7 +35,11 @@ export async function getSlotAvailability(sacramentType: string, date: string, n
   return computeSlotAvailability(sacramentType, existing, DEFAULT_LOCATION);
 }
 
-export async function createOnlineBooking(input: PublicBookingInput, now: Date = new Date()) {
+export async function createOnlineBooking(
+  input: PublicBookingInput,
+  actor?: SessionUser | null,
+  now: Date = new Date()
+) {
   const problem = validateBookingDate(input.scheduledDate, manilaDateString(now));
   if (problem) throw new ApiError(400, problem);
 
@@ -66,7 +70,7 @@ export async function createOnlineBooking(input: PublicBookingInput, now: Date =
           sacramentType: input.sacramentType,
           participantName: input.participantName,
           participantPhone: input.participantPhone,
-          participantEmail: input.participantEmail ?? null,
+          participantEmail: actor?.email ?? input.participantEmail ?? null,
           barangay: input.barangay ?? null,
           city: DEFAULT_CITY,
           province: DEFAULT_PROVINCE,
@@ -76,7 +80,7 @@ export async function createOnlineBooking(input: PublicBookingInput, now: Date =
           notes: input.notes ?? null,
           status: 'PENDING', // never confirmed automatically
           fee: 0, // the parish sets the fee when it reviews the request
-          createdById: null,
+          createdById: actor?.id ?? null,
           requirements: {
             create: requirementsFor(input.sacramentType).map((r) => ({ key: r.key, label: r.label })),
           },
@@ -85,12 +89,12 @@ export async function createOnlineBooking(input: PublicBookingInput, now: Date =
       });
 
       await writeAudit(tx, {
-        actor: PUBLIC_ACTOR,
+        actor: actor ? userActor(actor) : PUBLIC_ACTOR,
         action: 'appointment.create',
         entityType: 'Appointment',
         entityId: created.id,
         after: appointmentSnapshot(created),
-        reason: 'Online booking request',
+        reason: 'Online booking request by verified parishioner account',
       });
       return created;
     }, TX_OPTIONS)

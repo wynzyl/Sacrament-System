@@ -10,7 +10,7 @@ import { dateOnlyToUtc } from '@/lib/dates';
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await requireUser();
+    const user = await requireUser(['ADMIN', 'PRIEST', 'CASHIER']);
 
     const params = request.nextUrl.searchParams;
     const fromParam = params.get('from');

@@ -1,14 +1,19 @@
 // app/track/page.tsx
-// Public booking status lookup page (Constitution I & III, PRD R1-8).
+// Public booking status lookup & online payment launcher (Constitution I, II & III, PRD R1-8).
 // Requires reference number + the mobile number or email used when booking.
-// Returns only status, sacrament, date/time, fee/paid/balance and checklist status.
+// Allows online payment via Online Wallet or Bank Transfer when a balance is due.
 
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { CHURCH_NAME, SACRAMENT_LABELS } from '@/lib/constants';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  BANK_TRANSFER_CHANNELS,
+  CHURCH_NAME,
+  ONLINE_WALLET_CHANNELS,
+  SACRAMENT_LABELS,
+} from '@/lib/constants';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
 interface TrackedBooking {
@@ -32,7 +37,7 @@ const STATUS_DESCRIPTIONS: Record<
     badgeClass: 'bg-amber-100 text-amber-900 border-amber-300',
     title: 'Pending Review — Not Yet Confirmed',
     detail:
-      'Your request has been received and is awaiting review by the parish office. Please bring your requirements to the parish office.',
+      'Your request has been received and is awaiting review by the parish office. Once the parish office sets the fee, you may pay at the office or online below.',
   },
   CONFIRMED: {
     badgeClass: 'bg-blue-100 text-blue-900 border-blue-300',
@@ -47,11 +52,13 @@ const STATUS_DESCRIPTIONS: Record<
   CANCELLED: {
     badgeClass: 'bg-red-100 text-red-900 border-red-300',
     title: 'Cancelled',
-    detail: 'This appointment has been cancelled. Please contact the parish office if you have questions.',
+    detail:
+      'This appointment has been cancelled. Please contact the parish office if you have questions.',
   },
 };
 
 function TrackContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [reference, setReference] = useState('');
   const [contact, setContact] = useState('');
@@ -59,14 +66,34 @@ function TrackContent() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<TrackedBooking | null>(null);
 
+  // Online payment selection state
+  const [onlineMethod, setOnlineMethod] = useState<'ONLINE_WALLET' | 'BANK_TRANSFER'>(
+    'ONLINE_WALLET'
+  );
+  const [providerChannel, setProviderChannel] = useState<string>(
+    ONLINE_WALLET_CHANNELS[0].id
+  );
+  const [startingCheckout, setStartingCheckout] = useState(false);
+  const [checkoutError, setCheckoutError] = useState('');
+
   useEffect(() => {
     const refParam = searchParams.get('ref');
     if (refParam) setReference(refParam);
   }, [searchParams]);
 
+  const handleMethodChange = (method: 'ONLINE_WALLET' | 'BANK_TRANSFER') => {
+    setOnlineMethod(method);
+    setProviderChannel(
+      method === 'ONLINE_WALLET'
+        ? ONLINE_WALLET_CHANNELS[0].id
+        : BANK_TRANSFER_CHANNELS[0].id
+    );
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setCheckoutError('');
     setResult(null);
     setLoading(true);
     try {
@@ -87,6 +114,37 @@ function TrackContent() {
     }
   };
 
+  const handleStartOnlinePayment = async () => {
+    if (!result) return;
+    setCheckoutError('');
+    setStartingCheckout(true);
+    try {
+      const res = await fetch('/api/public/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: result.referenceNumber,
+          contact,
+          paymentMethod: onlineMethod,
+          providerChannel,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Could not start online payment.');
+      }
+      if (typeof data.checkoutUrl === 'string' && /^https?:\/\//.test(data.checkoutUrl)) {
+        window.location.assign(data.checkoutUrl);
+      } else {
+        router.push(data.checkoutUrl);
+      }
+    } catch (err) {
+      setCheckoutError(err instanceof Error ? err.message : 'Could not start online payment.');
+    } finally {
+      setStartingCheckout(false);
+    }
+  };
+
   const statusMeta = result
     ? STATUS_DESCRIPTIONS[result.status] || {
         badgeClass: 'bg-gray-100 text-gray-800 border-gray-300',
@@ -94,6 +152,9 @@ function TrackContent() {
         detail: '',
       }
     : null;
+
+  const channelOptions =
+    onlineMethod === 'ONLINE_WALLET' ? ONLINE_WALLET_CHANNELS : BANK_TRANSFER_CHANNELS;
 
   return (
     <main className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -216,6 +277,108 @@ function TrackContent() {
             </div>
           </div>
 
+          {/* Online Payment Provider: Online Wallet & Bank Transfer */}
+          {result.balanceDue > 0 && result.status !== 'CANCELLED' && (
+            <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-5 space-y-4">
+              <div>
+                <h3 className="text-base font-bold text-blue-950">
+                  Pay Online ({formatCurrency(result.balanceDue)})
+                </h3>
+                <p className="text-xs text-blue-800 mt-0.5">
+                  Pay securely via Online Wallet or Bank Transfer. Your booking status updates
+                  automatically once the payment provider verifies your transaction.
+                </p>
+              </div>
+
+              {checkoutError && (
+                <div
+                  role="alert"
+                  className="bg-red-50 border-l-4 border-red-600 p-3 rounded text-xs text-red-800"
+                >
+                  {checkoutError}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleMethodChange('ONLINE_WALLET')}
+                  aria-pressed={onlineMethod === 'ONLINE_WALLET'}
+                  className={`p-3 rounded-lg border text-left text-sm font-semibold transition-colors ${
+                    onlineMethod === 'ONLINE_WALLET'
+                      ? 'border-blue-700 bg-blue-700 text-white'
+                      : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                  }`}
+                >
+                  Online Wallet
+                  <span
+                    className={`block text-xs font-normal mt-0.5 ${
+                      onlineMethod === 'ONLINE_WALLET' ? 'text-blue-100' : 'text-gray-500'
+                    }`}
+                  >
+                    Maya, GCash Express, GrabPay, ShopeePay
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleMethodChange('BANK_TRANSFER')}
+                  aria-pressed={onlineMethod === 'BANK_TRANSFER'}
+                  className={`p-3 rounded-lg border text-left text-sm font-semibold transition-colors ${
+                    onlineMethod === 'BANK_TRANSFER'
+                      ? 'border-blue-700 bg-blue-700 text-white'
+                      : 'border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+                  }`}
+                >
+                  Bank Transfer
+                  <span
+                    className={`block text-xs font-normal mt-0.5 ${
+                      onlineMethod === 'BANK_TRANSFER' ? 'text-blue-100' : 'text-gray-500'
+                    }`}
+                  >
+                    InstaPay, PESONet, BPI, BDO, UnionBank
+                  </span>
+                </button>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="online-channel-select"
+                  className="block text-xs font-semibold text-gray-800 mb-1"
+                >
+                  {onlineMethod === 'ONLINE_WALLET'
+                    ? 'Select Online Wallet Provider'
+                    : 'Select Bank Transfer Channel'}
+                </label>
+                <select
+                  id="online-channel-select"
+                  value={providerChannel}
+                  onChange={(e) => setProviderChannel(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white text-sm"
+                >
+                  {channelOptions.map((ch) => (
+                    <option key={ch.id} value={ch.id}>
+                      {ch.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                type="button"
+                disabled={startingCheckout}
+                onClick={handleStartOnlinePayment}
+                className="w-full py-3 px-4 bg-emerald-600 text-white font-bold rounded-lg shadow hover:bg-emerald-700 disabled:bg-gray-400"
+              >
+                {startingCheckout
+                  ? 'Opening Secure Checkout...'
+                  : `Proceed to ${
+                      onlineMethod === 'ONLINE_WALLET' ? 'Online Wallet' : 'Bank Transfer'
+                    } Checkout`}
+              </button>
+            </div>
+          )}
+
           {result.requirements.length > 0 && (
             <div>
               <h3 className="text-sm font-bold text-gray-900 mb-2">Requirements Checklist</h3>
@@ -261,8 +424,11 @@ export default function TrackBookingPage() {
             >
               Request Booking
             </Link>
+            <Link href="/auth" className="text-blue-100 hover:text-white underline">
+              Sign In / Sign Up
+            </Link>
             <Link href="/" className="text-blue-100 hover:text-white underline">
-              Staff Login
+              Landing Page
             </Link>
           </nav>
         </div>

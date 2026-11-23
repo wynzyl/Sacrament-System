@@ -9,7 +9,7 @@ import { summarizePayments } from '@/lib/payments/ledger';
 
 export async function GET() {
   try {
-    const user = await requireUser();
+    const user = await requireUser(['ADMIN', 'CASHIER']);
 
     const { start, end } = manilaDayRange(manilaDateString());
     const where: Prisma.PaymentWhereInput = {

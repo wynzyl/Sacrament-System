@@ -89,6 +89,7 @@ Findings that shape the plan (constitution gaps are marked ⚖):
 | **R1-6** | Calendar view (admin + priest) | 1 | P1 |
 | **R1-7** | Sacrament requirements checklist | 1 | P1 |
 | **R1-8** | Public booking request + status tracking | 1 | P0 |
+| **R1-9** | Online payment provider: Online Wallet (Maya, GCash Express, GrabPay, ShopeePay) & Bank Transfer (InstaPay, PESONet, BPI, BDO, UnionBank, Metrobank, Landbank) with hosted checkout & HMAC-verified idempotent webhooks | 1 | P0 |
 | R2-1 | Notifications (SMS/email): request received, confirmed, reminder | 2 | P1 |
 | R2-2 | Sacramental certificates (PDF) + parish register | 2 | P1 |
 | R2-3 | Parishioner records (link people ↔ appointments) | 2 | P2 |

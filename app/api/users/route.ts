@@ -23,11 +23,13 @@ const USER_SELECT = {
 // GET all users with optional role filter
 export async function GET(request: NextRequest) {
   try {
-    await requireUser();
+    await requireUser(['ADMIN', 'CASHIER', 'PRIEST']);
 
     const role = request.nextUrl.searchParams.get('role');
     const where: Prisma.UserWhereInput = { deletedAt: null };
-    if (role === 'ADMIN' || role === 'PRIEST' || role === 'CASHIER') where.role = role;
+    if (role === 'ADMIN' || role === 'PRIEST' || role === 'CASHIER' || role === 'PARISHIONER') {
+      where.role = role;
+    }
 
     const users = await prisma.user.findMany({ where, select: USER_SELECT, orderBy: { name: 'asc' } });
     return json(users);

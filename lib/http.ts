@@ -22,9 +22,12 @@ export type SessionUser = {
   id: string;
   email: string;
   name: string;
+  phone?: string | null;
+  barangay?: string | null;
   role: string;
   status: string;
   availability: string;
+  emailVerifiedAt?: Date | null;
 };
 
 export function json(data: unknown, status = 200): NextResponse {
@@ -42,6 +45,26 @@ export async function requireUser(
   const { isValid, user } = await validateApiSession();
   if (!isValid || !user) throw new ApiError(401, 'Unauthorized');
   if (roles && !roles.includes(user.role)) throw new ApiError(403, forbiddenMessage);
+  return user;
+}
+
+/** Require a verified parishioner (or staff) account with an authenticated email. */
+export async function requireVerifiedAccount(): Promise<SessionUser> {
+  const { isValid, user } = await validateApiSession();
+  if (!isValid || !user) {
+    throw new ApiError(
+      401,
+      'You must sign in with a verified email account before booking an appointment.',
+      'AUTH_REQUIRED'
+    );
+  }
+  if (user.role === 'PARISHIONER' && !user.emailVerifiedAt) {
+    throw new ApiError(
+      403,
+      'Please verify your email address via the confirmation link sent to your inbox before booking an appointment.',
+      'EMAIL_NOT_VERIFIED'
+    );
+  }
   return user;
 }
 

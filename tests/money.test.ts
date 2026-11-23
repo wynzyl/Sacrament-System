@@ -45,18 +45,22 @@ describe('R1-1 Exact money (lib/money.ts)', () => {
     expect(balanceDueCentavos(500, 60_000)).toBe(0);
   });
 
-  it('summarizes cash and GCash payments net of negative reversals (FR-5.7)', () => {
+  it('summarizes cash, GCash, online wallet, and bank transfer payments net of negative reversals (FR-5.7)', () => {
     const summary = summarizePayments([
       { amount: new Prisma.Decimal('500.00'), paymentMethod: 'CASH' },
       { amount: new Prisma.Decimal('-500.00'), paymentMethod: 'CASH' },
       { amount: new Prisma.Decimal('1500.50'), paymentMethod: 'GCASH' },
+      { amount: new Prisma.Decimal('800.25'), paymentMethod: 'ONLINE_WALLET' },
+      { amount: new Prisma.Decimal('2000.00'), paymentMethod: 'BANK_TRANSFER' },
       { amount: new Prisma.Decimal('0.10'), paymentMethod: 'CASH' },
       { amount: new Prisma.Decimal('0.20'), paymentMethod: 'CASH' },
     ]);
     expect(summary).toEqual({
       cash: 0.3,
       gcash: 1500.5,
-      total: 1500.8,
+      onlineWallet: 800.25,
+      bankTransfer: 2000,
+      total: 4301.05,
     });
   });
 
