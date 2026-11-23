@@ -5,6 +5,7 @@ export enum UserRole {
   ADMIN = 'ADMIN',
   PRIEST = 'PRIEST',
   CASHIER = 'CASHIER',
+  PARISHIONER = 'PARISHIONER',
 }
 
 export enum UserStatus {
@@ -37,4 +38,23 @@ export enum AppointmentStatus {
 export enum PaymentMethod {
   CASH = 'CASH',
   GCASH = 'GCASH',
+  ONLINE_WALLET = 'ONLINE_WALLET',
+  BANK_TRANSFER = 'BANK_TRANSFER',
+}
+
+export enum OnlinePaymentStatus {
+  PENDING = 'PENDING',
+  SUCCEEDED = 'SUCCEEDED',
+  FAILED = 'FAILED',
+  EXPIRED = 'EXPIRED',
+}
+
+export enum AppointmentSource {
+  STAFF = 'STAFF',
+  ONLINE = 'ONLINE',
+}
+
+export enum PaymentKind {
+  PAYMENT = 'PAYMENT',
+  REVERSAL = 'REVERSAL',
 }

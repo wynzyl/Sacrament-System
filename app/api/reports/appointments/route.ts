@@ -1,76 +1,42 @@
 // app/api/reports/appointments/route.ts
-// API for fetching confirmed appointments report data
+// Confirmed appointments report for a date range.
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { validateApiSession } from '@/lib/auth';
+import { ApiError, errorResponse, json, requireUser } from '@/lib/http';
+import { dateOnly } from '@/lib/validation';
+import { dateOnlyToUtc } from '@/lib/dates';
 
 export async function GET(request: NextRequest) {
   try {
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const user = await requireUser(['ADMIN', 'PRIEST', 'CASHIER']);
 
-    const searchParams = request.nextUrl.searchParams;
-    const fromDate = searchParams.get('from');
-    const toDate = searchParams.get('to');
+    const params = request.nextUrl.searchParams;
+    const fromParam = params.get('from');
+    const toParam = params.get('to');
+    const priestId = params.get('priestId');
+    if (!fromParam || !toParam) throw new ApiError(400, 'From and To dates are required');
 
-    if (!fromDate || !toDate) {
-      return NextResponse.json(
-        { error: 'From and To dates are required' },
-        { status: 400 }
-      );
-    }
-
-    const from = new Date(fromDate);
-    from.setHours(0, 0, 0, 0);
-
-    const to = new Date(toDate);
-    to.setHours(23, 59, 59, 999);
-
-    const priestId = searchParams.get('priestId');
-
-    const where: any = {
+    const where: Prisma.AppointmentWhereInput = {
       status: 'CONFIRMED',
-      scheduledDate: {
-        gte: from,
-        lte: to,
-      },
+      // Appointment dates are stored as UTC-midnight calendar dates.
+      scheduledDate: { gte: dateOnlyToUtc(dateOnly.parse(fromParam)), lte: dateOnlyToUtc(dateOnly.parse(toParam)) },
       deletedAt: null,
     };
 
-    // Role-based filtering: Priests can only see their own appointments
-    if (user.role === 'PRIEST') {
-      where.assignedPriestId = user.id;
-    } else if (user.role === 'ADMIN' && priestId) {
-      // Admin can filter by specific priest
-      where.assignedPriestId = priestId;
-    }
+    // Role-based filtering: priests only see their own; admins may filter by priest.
+    if (user.role === 'PRIEST') where.assignedPriestId = user.id;
+    else if (user.role === 'ADMIN' && priestId) where.assignedPriestId = priestId;
 
     const appointments = await prisma.appointment.findMany({
       where,
-      include: {
-        assignedPriest: {
-          select: {
-            name: true,
-          },
-        },
-      },
-      orderBy: [
-        { scheduledDate: 'asc' },
-        { scheduledTime: 'asc' },
-      ],
+      include: { assignedPriest: { select: { name: true } } },
+      orderBy: [{ scheduledDate: 'asc' }, { scheduledTime: 'asc' }],
     });
 
-    return NextResponse.json(appointments);
+    return json(appointments);
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch appointments report' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'GET /api/reports/appointments');
   }
 }

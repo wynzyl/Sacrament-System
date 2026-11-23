@@ -5,13 +5,23 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Routes that don't require authentication
-const publicRoutes = ['/', '/api/auth/login'];
+const publicRoutes = [
+  '/',
+  '/auth',
+  '/auth/verify',
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/email-link',
+  '/api/auth/verify-email',
+];
 
 // API routes that require authentication
 const protectedApiPaths = [
   '/api/users',
   '/api/appointments',
   '/api/payments',
+  '/api/reports',
+  '/api/audit-logs',
   '/api/auth/logout',
   '/api/auth/session',
 ];
@@ -45,8 +55,8 @@ export function proxy(request: NextRequest) {
 
   if (isProtectedPage) {
     if (!sessionToken) {
-      // Redirect to login page
-      return NextResponse.redirect(new URL('/', request.url));
+      // Redirect to auth page
+      return NextResponse.redirect(new URL('/auth', request.url));
     }
     return NextResponse.next();
   }

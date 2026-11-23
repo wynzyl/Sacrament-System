@@ -4,14 +4,15 @@ import { useState, useEffect } from 'react';
 import { useAppointments } from '@/lib/hooks/useAppointments';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import { Appointment } from '@/types';
 import { SACRAMENT_ICONS } from '@/lib/constants';
 
 export function AppointmentsList() {
   const { appointments, fetchAppointments, updateAppointment } = useAppointments();
   const [filter, setFilter] = useState('all');
 
-  useEffect(() => { fetchAppointments(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    fetchAppointments();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleMarkCompleted = async (id: string) => {
     if (!confirm('Mark this sacrament as completed?')) return;
@@ -19,26 +20,26 @@ export function AppointmentsList() {
       await updateAppointment(id, { status: 'COMPLETED' });
       alert('Sacrament marked as completed!');
       fetchAppointments();
-    } catch {
-      alert('Error updating appointment');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Error updating appointment');
     }
   };
 
   const getSacramentIcon = (type: string) => SACRAMENT_ICONS[type] || '\u26EA';
 
-  const filteredAppointments = appointments.filter(apt => {
+  const filteredAppointments = appointments.filter((apt) => {
     if (filter === 'all') return apt.status !== 'CANCELLED';
     return apt.status === filter;
   });
 
   const today = new Date().toISOString().split('T')[0];
-  const todayAppointments = appointments.filter(apt => {
+  const todayAppointments = appointments.filter((apt) => {
     const aptDate = new Date(apt.scheduledDate).toISOString().split('T')[0];
     return aptDate === today && apt.status !== 'CANCELLED';
   });
 
-  const upcomingConfirmed = appointments.filter(apt =>
-    apt.status === 'CONFIRMED' && new Date(apt.scheduledDate) >= new Date()
+  const upcomingConfirmed = appointments.filter(
+    (apt) => apt.status === 'CONFIRMED' && new Date(apt.scheduledDate) >= new Date()
   );
 
   return (
@@ -47,7 +48,9 @@ export function AppointmentsList() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-sm font-medium text-gray-500">My Appointments</h3>
-          <p className="text-3xl font-bold text-purple-600">{appointments.filter(a => a.status !== 'CANCELLED').length}</p>
+          <p className="text-3xl font-bold text-purple-600">
+            {appointments.filter((a) => a.status !== 'CANCELLED').length}
+          </p>
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-sm font-medium text-gray-500">Today</h3>
@@ -59,7 +62,9 @@ export function AppointmentsList() {
         </div>
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-sm font-medium text-gray-500">Cancelled</h3>
-          <p className="text-3xl font-bold text-red-600">{appointments.filter(a => a.status === 'CANCELLED').length}</p>
+          <p className="text-3xl font-bold text-red-600">
+            {appointments.filter((a) => a.status === 'CANCELLED').length}
+          </p>
         </div>
       </div>
 
@@ -69,7 +74,11 @@ export function AppointmentsList() {
           <button
             key={status}
             onClick={() => setFilter(status)}
-            className={`px-4 py-2 rounded ${filter === status ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+            className={`px-4 py-2 rounded ${
+              filter === status
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 hover:bg-gray-100'
+            }`}
           >
             {status === 'all' ? 'All Active' : status}
           </button>
@@ -92,13 +101,40 @@ export function AppointmentsList() {
                   <div className="flex items-start gap-4">
                     <div className="text-3xl">{getSacramentIcon(apt.sacramentType)}</div>
                     <div>
-                      <h3 className="font-semibold text-lg">{apt.participantName}</h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-lg">{apt.participantName}</h3>
+                        {apt.referenceNumber && (
+                          <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                            {apt.referenceNumber}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-gray-600">{apt.sacramentType.replace('_', ' ')}</p>
                       <div className="mt-2 text-sm text-gray-500 space-y-1">
-                        <p>{'\uD83D\uDCC5'} {formatDate(apt.scheduledDate)} at {apt.scheduledTime}</p>
-                        {apt.location && <p>{'\uD83D\uDCCD'} {apt.location}</p>}
-                        {apt.barangay && <p>{'\uD83C\uDFE0'} {apt.barangay}, {apt.city}, {apt.province}</p>}
-                        {apt.participantPhone && <p>{'\uD83D\uDCDE'} {apt.participantPhone}</p>}
+                        <p>
+                          {'\uD83D\uDCC5'} {formatDate(apt.scheduledDate)} at {apt.scheduledTime}
+                        </p>
+                        {apt.location && (
+                          <p>
+                            {'\uD83D\uDCCD'} {apt.location}
+                          </p>
+                        )}
+                        {apt.barangay && (
+                          <p>
+                            {'\uD83C\uDFE0'} {apt.barangay}, {apt.city}, {apt.province}
+                          </p>
+                        )}
+                        {apt.participantPhone && (
+                          <p>
+                            {'\uD83D\uDCDE'} {apt.participantPhone}
+                          </p>
+                        )}
+                        {typeof apt.requirementsTotal === 'number' && apt.requirementsTotal > 0 && (
+                          <p>
+                            {'\uD83D\uDCCB'} {apt.requirementsMet ?? 0}/{apt.requirementsTotal}{' '}
+                            requirements verified
+                          </p>
+                        )}
                         {apt.notes && <p className="italic">Note: {apt.notes}</p>}
                       </div>
                     </div>

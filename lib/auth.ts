@@ -33,18 +33,6 @@ export async function comparePassword(
 }
 
 /**
- * Generate a receipt number
- * Format: RCP-YYYY-XXXXX
- */
-export function generateReceiptNumber(): string {
-  const year = new Date().getFullYear();
-  const random = Math.floor(Math.random() * 99999)
-    .toString()
-    .padStart(5, '0');
-  return `RCP-${year}-${random}`;
-}
-
-/**
  * Format currency for display
  */
 export function formatCurrency(amount: number): string {
@@ -150,9 +138,12 @@ export async function getSession() {
           id: true,
           email: true,
           name: true,
+          phone: true,
+          barangay: true,
           role: true,
           status: true,
           availability: true,
+          emailVerifiedAt: true,
         },
       },
     },
@@ -205,9 +196,12 @@ export async function validateApiSession(): Promise<{
     id: string;
     email: string;
     name: string;
+    phone: string | null;
+    barangay: string | null;
     role: string;
     status: string;
     availability: string;
+    emailVerifiedAt: Date | null;
   } | null;
 }> {
   const user = await getSession();

@@ -170,10 +170,12 @@ export function useReports() {
     doc.text('Summary', 14, startY);
     autoTable(doc, {
       startY: startY + 2,
-      head: [['Cash', 'GCash', 'Total']],
+      head: [['Cash', 'GCash', 'Online Wallet', 'Bank Transfer', 'Total']],
       body: [[
         formatAmount(data.totals.cash),
         formatAmount(data.totals.gcash),
+        formatAmount(data.totals.onlineWallet ?? 0),
+        formatAmount(data.totals.bankTransfer ?? 0),
         formatAmount(data.totals.total)
       ]],
       theme: 'grid',

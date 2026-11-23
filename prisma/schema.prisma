@@ -10,24 +10,46 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User model - represents system users (Admin, Priest, Cashier)
+// User model - represents system users (Admin, Priest, Cashier, Parishioner)
 model User {
-  id           String             @id @default(uuid())
-  email        String             @unique
-  password     String
-  name         String
-  role         UserRole
-  status       UserStatus         @default(ACTIVE)
-  availability PriestAvailability @default(AVAILABLE)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  deletedAt    DateTime?          // Soft delete timestamp
+  id              String             @id @default(uuid())
+  email           String             @unique
+  password        String
+  name            String
+  phone           String?
+  barangay        String?
+  role            UserRole
+  status          UserStatus         @default(ACTIVE)
+  availability    PriestAvailability @default(AVAILABLE)
+  emailVerifiedAt DateTime?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  deletedAt       DateTime? // Soft delete timestamp
 
   // Relations
-  appointments        Appointment[] @relation("CreatedByUser") // Appointments created by this user
-  assignedAppointments Appointment[] @relation("AssignedPriest") // Appointments assigned to this priest
-  payments            Payment[]     // Payments processed by this cashier
-  sessions            Session[]     // User sessions
+  appointments           Appointment[]            @relation("CreatedByUser") // Appointments created by this user
+  assignedAppointments   Appointment[]            @relation("AssignedPriest") // Appointments assigned to this priest
+  payments               Payment[] // Payments processed by this cashier
+  sessions               Session[] // User sessions
+  emailVerificationLinks EmailVerificationToken[] // Email confirmation & passwordless OAuth-like links
+}
+
+// EmailVerificationToken - OAuth-like email confirmation & magic-link tokens
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  userId    String
+  email     String
+  token     String    @unique
+  purpose   String    @default("EMAIL_CONFIRMATION") // EMAIL_CONFIRMATION | MAGIC_SIGNIN
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@index([email])
 }
 
 // Session model - for server-side session authentication
@@ -38,7 +60,7 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([userId])
@@ -49,6 +71,7 @@ enum UserRole {
   ADMIN
   PRIEST
   CASHIER
+  PARISHIONER
 }
 
 // Enum for user status (Active/Inactive)
@@ -76,22 +99,48 @@ enum SacramentType {
 
 // Appointment status tracking
 enum AppointmentStatus {
-  PENDING      // Just created
-  CONFIRMED    // Confirmed by admin/priest
-  COMPLETED    // Service completed
-  CANCELLED    // Cancelled
+  PENDING // Just created
+  CONFIRMED // Confirmed by admin/priest
+  COMPLETED // Service completed
+  CANCELLED // Cancelled
 }
 
 // Payment method options
 enum PaymentMethod {
   CASH
   GCASH
+  ONLINE_WALLET
+  BANK_TRANSFER
+}
+
+// Status of an online hosted-checkout payment intent
+enum OnlinePaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  EXPIRED
+}
+
+// Where an appointment request originated
+enum AppointmentSource {
+  STAFF // Entered by parish staff
+  ONLINE // Submitted by a parishioner through the public booking page
+}
+
+// Payment ledger entry kind. Payments are append-only: a correction is a
+// REVERSAL entry (negative amount) that references the original PAYMENT.
+enum PaymentKind {
+  PAYMENT
+  REVERSAL
 }
 
 // Appointment model - stores sacrament schedules
 model Appointment {
-  id            String            @id @default(uuid())
-  sacramentType SacramentType
+  id              String            @id @default(uuid())
+  // Human-friendly reference given to parishioners, e.g. SAC-2026-K7M4QX
+  referenceNumber String            @unique
+  source          AppointmentSource @default(STAFF)
+  sacramentType   SacramentType
 
   // Participant information
   participantName  String
@@ -99,70 +148,162 @@ model Appointment {
   participantEmail String?
 
   // Participant address
-  barangay         String?
-  city             String?         @default("Urdaneta City")
-  province         String?         @default("Pangasinan")
+  barangay String?
+  city     String? @default("Urdaneta City")
+  province String? @default("Pangasinan")
 
   // Schedule details
   scheduledDate DateTime
   scheduledTime String
 
   // Location and notes
-  location      String?           @default("Immaculate Conception Parish Church")
-  notes         String?
-  
+  location String? @default("Immaculate Conception Parish Church")
+  notes    String?
+
   // Status tracking
-  status        AppointmentStatus @default(PENDING)
-  
-  // Fee information
-  fee           Float             @default(0)
-  
+  status AppointmentStatus @default(PENDING)
+
+  // Cancellation details (required when status becomes CANCELLED)
+  cancelReason String?
+  cancelledAt  DateTime?
+
+  // Fee information (exact decimal - never Float for money)
+  fee Decimal @default(0) @db.Decimal(12, 2)
+
   // Relationships
-  createdBy     User              @relation("CreatedByUser", fields: [createdById], references: [id])
-  createdById   String
+  // createdBy is null for appointments requested online by a parishioner
+  createdBy   User?   @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdById String?
 
   // Assigned Priest
-  assignedPriest   User?          @relation("AssignedPriest", fields: [assignedPriestId], references: [id])
+  assignedPriest   User?   @relation("AssignedPriest", fields: [assignedPriestId], references: [id])
   assignedPriestId String?
 
-  payments      Payment[]
-  
+  payments       Payment[]
+  paymentIntents OnlinePaymentIntent[]
+  requirements   AppointmentRequirement[]
+
   // Timestamps
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  deletedAt     DateTime?         // Soft delete timestamp
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // Soft delete timestamp
 
   @@index([sacramentType])
+  @@index([assignedPriestId, scheduledDate])
   @@index([scheduledDate])
   @@index([status])
 }
 
 // Payment model - tracks all payments
 model Payment {
-  id              String        @id @default(uuid())
-  
+  id String @id @default(uuid())
+
   // Payment details
-  amount          Float
-  paymentMethod   PaymentMethod
-  
-  // GCash specific details
-  gcashRefNumber  String?       // Reference number for GCash
-  
-  // Receipt information
-  receiptNumber   String        @unique
-  
+  // Exact decimal. Negative for REVERSAL entries.
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod
+  kind          PaymentKind   @default(PAYMENT)
+
+  // Reference & provider details (GCash, Online Wallet, Bank Transfer, Online Gateway)
+  gcashRefNumber  String? // Reference number for GCash / wallet / bank transfer
+  provider        String? // e.g. MANUAL | PAYMONGO | SANDBOX_GATEWAY
+  providerChannel String? // e.g. MAYA | GCASH | GRABPAY | BPI | BDO | UNIONBANK | INSTAPAY | PESONET
+  providerRef     String? @unique // Provider transaction/payment ID for webhook idempotency
+
+  // Receipt information (allocated sequentially in the payment transaction)
+  receiptNumber String @unique
+
+  // Reversal bookkeeping: a REVERSAL points at the PAYMENT it cancels.
+  // A payment can be reversed at most once (unique).
+  reversesPaymentId String?  @unique
+  reversesPayment   Payment? @relation("PaymentReversal", fields: [reversesPaymentId], references: [id], onDelete: Restrict)
+  reversal          Payment? @relation("PaymentReversal")
+  reason            String?
+
   // Relationships
-  appointment     Appointment   @relation(fields: [appointmentId], references: [id])
-  appointmentId   String
-  
-  processedBy     User          @relation(fields: [processedById], references: [id])
-  processedById   String        // Cashier who processed
-  
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+  appointmentId String
+
+  // Nullable for online gateway payments settled via verified webhook (SYSTEM actor)
+  processedBy   User?   @relation(fields: [processedById], references: [id])
+  processedById String?
+
+  onlineIntent OnlinePaymentIntent?
+
   // Timestamps
-  createdAt       DateTime      @default(now())
-  deletedAt       DateTime?     // Soft delete timestamp
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // Soft delete timestamp
 
   @@index([createdAt])
   @@index([processedById])
   @@index([paymentMethod])
+  @@index([appointmentId])
+}
+
+// Hosted online payment checkout session (Online Wallet & Bank Transfer).
+// Never confirms an appointment on creation; only a verified webhook transitions
+// it to SUCCEEDED and writes the Payment ledger entry (Constitution II & III).
+model OnlinePaymentIntent {
+  id               String              @id @default(uuid())
+  appointmentId    String
+  amount           Decimal             @db.Decimal(12, 2)
+  paymentMethod    PaymentMethod // ONLINE_WALLET | BANK_TRANSFER
+  provider         String // PAYMONGO | SANDBOX_GATEWAY
+  providerChannel  String // MAYA | GCASH | GRABPAY | BPI | BDO | UNIONBANK | INSTAPAY | PESONET
+  providerIntentId String              @unique
+  referenceNumber  String? // Customer/bank reference or provider transaction ref
+  status           OnlinePaymentStatus @default(PENDING)
+  webhookEventId   String?             @unique
+  paymentId        String?             @unique
+  expiresAt        DateTime
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  payment     Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([appointmentId])
+  @@index([status])
+}
+
+// Requirement checklist item for an appointment (documents, seminars, sponsors)
+model AppointmentRequirement {
+  id            String    @id @default(uuid())
+  appointmentId String
+  key           String // Stable key from lib/requirements.ts
+  label         String // Label as shown when the item was created
+  isMet         Boolean   @default(false)
+  verifiedById  String?
+  verifiedAt    DateTime?
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@unique([appointmentId, key])
+}
+
+// Immutable audit trail. The application only ever inserts; a database trigger
+// (see the add_phase1_foundations migration) rejects UPDATE and DELETE.
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorType  String // USER | SYSTEM | PUBLIC
+  actorId    String?
+  actorName  String?
+  actorRole  String?
+  action     String // e.g. appointment.create, payment.reverse
+  entityType String // Appointment | Payment | User | AppointmentRequirement | OnlinePaymentIntent
+  entityId   String
+  before     Json?
+  after      Json?
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([actorId])
+}
+
+// Atomic counters (e.g. receipt sequence per year)
+model Counter {
+  key   String @id
+  value Int    @default(0)
 }

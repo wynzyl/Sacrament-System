@@ -1,83 +1,39 @@
 // app/api/payments/today/route.ts
-// API for fetching today's payments with summary
+// Today's ledger entries (Manila business day) with a net cash/GCash summary.
 
-import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { validateApiSession } from '@/lib/auth';
+import { errorResponse, json, requireUser } from '@/lib/http';
+import { manilaDateString, manilaDayRange } from '@/lib/dates';
+import { summarizePayments } from '@/lib/payments/ledger';
 
 export async function GET() {
   try {
-    // Validate session
-    const { isValid, user } = await validateApiSession();
-    if (!isValid || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
+    const user = await requireUser(['ADMIN', 'CASHIER']);
 
-    // Get today's date range (start and end of day)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    // Build query with role-based filtering
-    const where: any = {
-      createdAt: {
-        gte: today,
-        lt: tomorrow,
-      },
+    const { start, end } = manilaDayRange(manilaDateString());
+    const where: Prisma.PaymentWhereInput = {
+      createdAt: { gte: start, lt: end },
       deletedAt: null,
     };
 
-    // Cashiers can only see their own processed payments
-    if (user.role === 'CASHIER') {
-      where.processedById = user.id;
-    }
-    // ADMIN sees all payments
+    // Cashiers only see the entries they processed; admins see everything.
+    if (user.role === 'CASHIER') where.processedById = user.id;
 
-    // Fetch payments for today (excluding soft-deleted)
     const payments = await prisma.payment.findMany({
       where,
       include: {
-        appointment: {
-          select: {
-            participantName: true,
-            sacramentType: true,
-          },
-        },
-        processedBy: {
-          select: {
-            name: true,
-          },
-        },
+        appointment: { select: { participantName: true, sacramentType: true, referenceNumber: true } },
+        processedBy: { select: { name: true } },
+        reversal: { select: { id: true, receiptNumber: true } },
+        reversesPayment: { select: { id: true, receiptNumber: true } },
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
 
-    // Calculate summary
-    const summary = payments.reduce(
-      (acc, payment) => {
-        if (payment.paymentMethod === 'CASH') {
-          acc.cash += payment.amount;
-        } else if (payment.paymentMethod === 'GCASH') {
-          acc.gcash += payment.amount;
-        }
-        acc.total += payment.amount;
-        return acc;
-      },
-      { cash: 0, gcash: 0, total: 0 }
-    );
-
-    return NextResponse.json({ payments, summary });
+    // Reversal entries are negative, so the summary is net.
+    return json({ payments, summary: summarizePayments(payments) });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch payments' },
-      { status: 500 }
-    );
+    return errorResponse(error, 'GET /api/payments/today');
   }
 }
