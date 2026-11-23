@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { User, AppointmentFormData } from '@/types';
 import { URDANETA_BARANGAYS } from '@/lib/constants';
 import {
@@ -7,6 +8,8 @@ import {
   isTerminal,
   type AppointmentStatusKey,
 } from '@/lib/appointments/stateMachine';
+import { calculateArancelFee, getArancelTariff } from '@/lib/arancel';
+import { formatCurrency } from '@/lib/utils';
 
 interface AppointmentFormProps {
   form: AppointmentFormData;
@@ -36,8 +39,77 @@ export function AppointmentForm({
   availablePriests,
   allPriests = [],
 }: AppointmentFormProps) {
+  const tariff = getArancelTariff(form.sacramentType);
+  const [sponsorCount, setSponsorCount] = useState<number>(tariff.includedSponsors);
+  const [selectedAddOns, setSelectedAddOns] = useState<string[]>([]);
+
+  // On new appointment creation, if fee is empty, auto-populate standard Arancel baseFee
+  useEffect(() => {
+    if (!isEditing && form.fee === '') {
+      const initialBreakdown = calculateArancelFee({
+        sacramentType: form.sacramentType,
+        sponsorCount: tariff.includedSponsors,
+        selectedAddOnKeys: [],
+      });
+      onChange({ ...form, fee: initialBreakdown.totalFee.toString() });
+    }
+  }, [isEditing]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const set = (field: keyof AppointmentFormData, value: string) =>
     onChange({ ...form, [field]: value });
+
+  const handleSacramentTypeChange = (nextSacramentType: string) => {
+    const nextTariff = getArancelTariff(nextSacramentType);
+    const nextSponsors = nextTariff.includedSponsors;
+    setSponsorCount(nextSponsors);
+    setSelectedAddOns([]);
+    const nextBreakdown = calculateArancelFee({
+      sacramentType: nextSacramentType,
+      sponsorCount: nextSponsors,
+      selectedAddOnKeys: [],
+    });
+    onChange({
+      ...form,
+      sacramentType: nextSacramentType,
+      fee: nextBreakdown.totalFee.toString(),
+    });
+  };
+
+  const handleSponsorCountChange = (nextCount: number) => {
+    const clamped = Number.isFinite(nextCount) ? Math.max(0, Math.floor(nextCount)) : 0;
+    setSponsorCount(clamped);
+    const nextBreakdown = calculateArancelFee({
+      sacramentType: form.sacramentType,
+      sponsorCount: clamped,
+      selectedAddOnKeys: selectedAddOns,
+    });
+    onChange({
+      ...form,
+      fee: nextBreakdown.totalFee.toString(),
+    });
+  };
+
+  const handleToggleAddOn = (addOnKey: string) => {
+    const nextAddOns = selectedAddOns.includes(addOnKey)
+      ? selectedAddOns.filter((k) => k !== addOnKey)
+      : [...selectedAddOns, addOnKey];
+    setSelectedAddOns(nextAddOns);
+    const nextBreakdown = calculateArancelFee({
+      sacramentType: form.sacramentType,
+      sponsorCount,
+      selectedAddOnKeys: nextAddOns,
+    });
+    onChange({
+      ...form,
+      fee: nextBreakdown.totalFee.toString(),
+    });
+  };
+
+  const breakdown = calculateArancelFee({
+    sacramentType: form.sacramentType,
+    sponsorCount,
+    selectedAddOnKeys: selectedAddOns,
+  });
 
   // FR-3.3: Offer only statuses reachable from the persisted status (excluding CANCELLED,
   // which has its own Cancel modal requiring a reason and payment disposition).
@@ -60,7 +132,7 @@ export function AppointmentForm({
           <label className="block text-sm font-medium mb-1">Sacrament Type</label>
           <select
             value={form.sacramentType}
-            onChange={(e) => set('sacramentType', e.target.value)}
+            onChange={(e) => handleSacramentTypeChange(e.target.value)}
             disabled={terminal}
             className="w-full px-3 py-2 border rounded-lg disabled:bg-gray-100"
           >
@@ -222,8 +294,97 @@ export function AppointmentForm({
         />
       </div>
 
+      {/* Diocesan Arancel Fee Calculator Card */}
+      <div className="bg-blue-50/70 border border-blue-200 rounded-lg p-3.5 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-semibold text-blue-950">
+              Diocesan Arancel Fee Calculator
+            </h4>
+            <p className="text-xs text-blue-800 mt-0.5">
+              {tariff.title} — Base: {formatCurrency(tariff.baseFee)}
+            </p>
+            {tariff.note && (
+              <p className="text-xs text-blue-700 mt-0.5 italic">{tariff.note}</p>
+            )}
+          </div>
+          <button
+            type="button"
+            disabled={terminal}
+            onClick={() => set('fee', breakdown.totalFee.toString())}
+            className="text-xs font-medium bg-blue-600 text-white px-2.5 py-1.5 rounded hover:bg-blue-700 disabled:bg-gray-400 whitespace-nowrap"
+          >
+            Apply Standard Arancel ({formatCurrency(breakdown.totalFee)})
+          </button>
+        </div>
+
+        {tariff.extraSponsorFee > 0 && (
+          <div className="flex items-center justify-between gap-3 pt-1 border-t border-blue-200/70">
+            <label htmlFor="arancel-sponsor-count" className="text-xs font-medium text-blue-950">
+              Total Sponsors / Godparents ({tariff.includedSponsors} included in base, +
+              {formatCurrency(tariff.extraSponsorFee)} each extra)
+            </label>
+            <input
+              id="arancel-sponsor-count"
+              type="number"
+              min="0"
+              step="1"
+              disabled={terminal}
+              value={sponsorCount}
+              onChange={(e) => handleSponsorCountChange(Number(e.target.value))}
+              className="w-20 px-2 py-1 text-sm border border-blue-300 rounded bg-white text-right"
+            />
+          </div>
+        )}
+
+        {tariff.addOns.length > 0 && (
+          <div className="pt-1 border-t border-blue-200/70 space-y-1.5">
+            <p className="text-xs font-medium text-blue-950">Optional Parish Add-ons:</p>
+            {tariff.addOns.map((addOn) => {
+              const checked = selectedAddOns.includes(addOn.key);
+              return (
+                <label
+                  key={addOn.key}
+                  className="flex items-center justify-between text-xs text-blue-900 cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={terminal}
+                      onChange={() => handleToggleAddOn(addOn.key)}
+                      className="rounded border-blue-300 text-blue-600"
+                    />
+                    <span>{addOn.label}</span>
+                  </span>
+                  <span className="font-medium">+{formatCurrency(addOn.amount)}</span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="pt-2 border-t border-blue-200/70 space-y-1">
+          {breakdown.itemizedLines.map((line, idx) => (
+            <div key={idx} className="flex justify-between text-xs text-blue-900">
+              <span>{line.label}</span>
+              <span>{formatCurrency(line.amount)}</span>
+            </div>
+          ))}
+          <div className="flex justify-between text-xs font-bold text-blue-950 pt-1 border-t border-blue-200">
+            <span>Standard Arancel Total</span>
+            <span>{formatCurrency(breakdown.totalFee)}</span>
+          </div>
+        </div>
+      </div>
+
       <div>
-        <label className="block text-sm font-medium mb-1">Fee (PHP)</label>
+        <label className="block text-sm font-medium mb-1">
+          Fee (PHP){' '}
+          <span className="text-xs font-normal text-gray-500">
+            (Auto-calculated from Arancel or override manually)
+          </span>
+        </label>
         <input
           type="number"
           value={form.fee}

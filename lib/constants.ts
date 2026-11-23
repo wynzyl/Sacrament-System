@@ -185,7 +185,7 @@ export const DEFAULT_APPOINTMENT_FORM = {
   scheduledTime: '',
   location: DEFAULT_LOCATION,
   notes: '',
-  fee: '',
+  fee: '500',
   status: AppointmentStatus.PENDING as string,
   assignedPriestId: '',
 };
